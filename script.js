@@ -1,4 +1,4 @@
-const BACKEND_URL = "https://https://jobtaste.onrender.com/ask";
+const BACKEND_URL = "https://jobtaste.onrender.com/ask";
 
 require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.34.1/min/vs' }});
 require(["vs/editor/editor.main"], function () {
