@@ -193,25 +193,3 @@ document.getElementById("deployVercel").onclick = async () => {
   const encoded = encodeURIComponent(JSON.stringify(payload));
   window.open(`https://vercel.new/clone?repo-data=${encoded}`, "_blank");
 };
-
-//// ========== AI DLA WYBRANEGO PLIKU (nocode!) ========== ////
-document.getElementById("send").onclick = async () => {
-  const prompt = document.getElementById("prompt").value;
-  if (!prompt) return alert("Podaj instrukcję dla AI.");
-  saveCurrentFile();
-  let code = currentFilePath ? allFileContents[currentFilePath] : window.editor.getValue();
-
-  const res = await fetch(BACKEND_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, code })
-  });
-  const data = await res.json();
-  if (currentFilePath) {
-    allFileContents[currentFilePath] = data.result;
-    window.editor.setValue(data.result);
-  } else {
-    window.editor.setValue(data.result);
-  }
-  document.getElementById("prompt").value = "";
-};
