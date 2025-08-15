@@ -1,1 +1,19 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h2>Prosty kalkulator</h2>
+<input id="a"> +
+<input id="b">
+<button onclick="sum()"> = </button>
+<span id="result"></span>
+
+<script>
+function sum() {
+  const a = Number(document.getElementById('a').value);
+  const b = Number(document.getElementById('b').value);
+  document.getElementById('result').innerText = a + b;
+}
+</script>
+</body>
+</html>
 
