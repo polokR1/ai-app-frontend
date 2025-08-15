@@ -8,9 +8,22 @@
 </head>
 <body>
   <h1>Moja fabryka aplikacji</h1>
+
+  <!-- ======= lista szablonów ======= -->
+  <select id="templateSelect">
+    <option value="">-- wybierz szablon --</option>
+    <option value="calculator">Kalkulator</option>
+    <option value="landing">Landing Page</option>
+  </select>
+  <button id="loadTemplate">Wczytaj szablon</button>
+  <!-- ================================== -->
+
   <textarea id="prompt" placeholder="Opisz, co zmienić w kodzie" rows="4" cols="50"></textarea>
   <button id="send">Wyślij do AI</button>
+
   <div id="editor" style="height:500px;border:1px solid #ccc;margin-top:10px"></div>
+
+  <button id="download">Pobierz gotowy projekt</button>
+
   <script src="script.js"></script>
 </body>
-</html>
