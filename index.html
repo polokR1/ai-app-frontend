@@ -9,24 +9,26 @@
 </head>
 <body>
   <h1>Moja fabryka aplikacji</h1>
-
-  <!-- ======= lista szablonów ======= -->
-  <select id="templateSelect">
-    <option value="">-- wybierz szablon --</option>
-    <option value="calculator">Kalkulator</option>
-    <option value="landing">Landing Page</option>
-  </select>
-  <button id="loadTemplate">Wczytaj szablon</button>
-  <!-- ================================== -->
-
-  <textarea id="prompt" placeholder="Opisz, co zmienić w kodzie" rows="4" cols="50"></textarea>
-  <button id="send">Wyślij do AI</button>
-
-  <div id="editor" style="height:500px;border:1px solid #ccc;margin-top:10px"></div>
-
-  <button id="download">Pobierz gotowy projekt</button>
-  <button id="deployVercel">Deploy do Vercel</button>
-
+  <div class="main-wrapper">
+    <!-- Panel czatu -->
+    <div class="chat-panel">
+      <div id="chat-messages"></div>
+      <textarea id="chat-input" placeholder="Napisz wiadomość do AI"></textarea>
+      <button id="chat-send">Wyślij</button>
+    </div>
+    <!-- Panel kodowania -->
+    <div class="code-panel">
+      <select id="templateSelect">
+        <option value="">-- wybierz szablon --</option>
+        <option value="calculator">Kalkulator</option>
+        <option value="landing">Landing Page</option>
+      </select>
+      <button id="loadTemplate">Wczytaj szablon</button>
+      <div id="editor" style="height:500px;border:1px solid #ccc;margin-top:10px"></div>
+      <button id="download">Pobierz gotowy projekt</button>
+      <button id="deployVercel">Deploy do Vercel</button>
+    </div>
+  </div>
   <script src="script.js"></script>
 </body>
 </html>
