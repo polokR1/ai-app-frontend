@@ -21,3 +21,24 @@ document.getElementById("send").onclick = async () => {
   const data = await res.json();
   window.editor.setValue(data.result);
 };
+// --- ładowanie szablonu ---
+document.getElementById("loadTemplate").onclick = async () => {
+  const selected = document.getElementById("templateSelect").value;
+  if (!selected) return alert("Wybierz szablon");
+
+  const res = await fetch(`/templates/${selected}.html`);
+  const templateCode = await res.text();
+  window.editor.setValue(templateCode);
+};
+
+// --- pobieranie gotowego kodu ---
+document.getElementById("download").onclick = () => {
+  const code = window.editor.getValue();
+  const blob = new Blob([code], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "app.html";
+  a.click();
+};
