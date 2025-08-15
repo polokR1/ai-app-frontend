@@ -19,30 +19,20 @@
     </div>
     <!-- Panel kodowania -->
     <div class="code-panel">
-      <div class="template-row">
-        <select id="templateSelect">
-          <option value="">-- wybierz szablon --</option>
-          <option value="calculator">Kalkulator</option>
-          <option value="landing">Landing Page</option>
-        </select>
-        <button id="loadTemplate">Wczytaj szablon</button>
-      </div>
+      <select id="templateSelect">
+        <option value="">-- wybierz szablon --</option>
+        <option value="calculator">Kalkulator</option>
+        <option value="landing">Landing Page</option>
+      </select>
+      <button id="loadTemplate">Wczytaj szablon</button>
       <hr>
-      <div class="zip-row">
-        <label>Wczytaj własny szablon ZIP:
-          <input type="file" id="zipInput" accept=".zip" />
-        </label>
-        <button id="loadZip" disabled>Wczytaj ZIP</button>
-      </div>
+      <label>Wczytaj własny szablon ZIP:
+        <input type="file" id="zipInput" accept=".zip" />
+      </label>
+      <button id="loadZip" disabled>Wczytaj ZIP</button>
 
       <div id="file-explorer"></div>
-      <div class="editor-area">
-        <div id="editor" style="height:350px;border:1px solid #ccc;margin-top:10px"></div>
-        <div class="ai-row">
-          <textarea id="prompt" placeholder="Opisz, co chcesz zmienić w wybranym pliku" rows="2"></textarea>
-          <button id="send">Wyślij kod do AI</button>
-        </div>
-      </div>
+      <div id="editor" style="height:400px;border:1px solid #ccc;margin-top:10px"></div>
       <button id="download">Pobierz cały projekt jako ZIP</button>
       <button id="deployVercel">Deploy do Vercel</button>
     </div>
