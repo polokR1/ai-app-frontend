@@ -19,7 +19,7 @@ document.getElementById("chat-send").onclick = async () => {
   addChatMessage("user", msg);
 
   // Tu możesz wysłać prompt do AI wraz z kodem z edytora:
-  /*
+
   const code = window.editor.getValue();
   const res = await fetch(BACKEND_URL, {
     method: "POST",
@@ -28,10 +28,7 @@ document.getElementById("chat-send").onclick = async () => {
   });
   const data = await res.json();
   addChatMessage("ai", data.result);
-  */
 
-  // Tymczasowa odpowiedź demo:
-  setTimeout(() => addChatMessage("ai", "Odpowiedź AI na: " + msg), 800);
 
   input.value = "";
 };
