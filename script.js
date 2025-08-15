@@ -18,25 +18,31 @@ document.getElementById("chat-send").onclick = async () => {
   addChatMessage("user", msg);
 
   const code = window.editor.getValue();
-  const res = await fetch(BACKEND_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: msg, code })
-  });
-  const data = await res.json();
-  addChatMessage("ai", data.result);
+  try {
+    const res = await fetch(BACKEND_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: msg, code })
+    });
+    const data = await res.json();
+    addChatMessage("ai", data.result);
+  } catch (e) {
+    addChatMessage("ai", "Błąd połączenia z backendem :(");
+  }
 
   input.value = "";
 };
 
 // Wysyłanie wiadomości Enterem (Shift+Enter = nowa linia)
 const chatInput = document.getElementById("chat-input");
-chatInput.addEventListener("keydown", function(event) {
-  if (event.key === "Enter" && !event.shiftKey) {
-    event.preventDefault();
-    document.getElementById("chat-send").click();
-  }
-});
+if (chatInput) {
+  chatInput.addEventListener("keydown", function(event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      document.getElementById("chat-send").click();
+    }
+  });
+}
 
 function addChatMessage(who, text) {
   const chat = document.getElementById("chat-messages");
