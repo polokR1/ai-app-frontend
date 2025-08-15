@@ -41,6 +41,7 @@ document.getElementById("download").onclick = () => {
   a.href = url;
   a.download = "app.html";
   a.click();
+};
   // --- deploy do Vercel ---
 document.getElementById("deployVercel").onclick = async () => {
   const code = window.editor.getValue();
