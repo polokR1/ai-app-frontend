@@ -41,4 +41,22 @@ document.getElementById("download").onclick = () => {
   a.href = url;
   a.download = "app.html";
   a.click();
+  // --- deploy do Vercel ---
+document.getElementById("deployVercel").onclick = async () => {
+  const code = window.editor.getValue();
+
+  // tworzymy plik README w payloadzie, bo Vercel tego wymaga
+  const payload = {
+    name: `ai-generated-app-${Date.now()}`,
+    description: "App wygenerowana przez AI App Builder",
+    private: false,
+    files: {
+      "index.html": code,
+      "README.md": "# App wygenerowana z AI App Builder"
+    }
+  };
+
+  // otwarcie gotowego linku Vercel
+  const encoded = encodeURIComponent(JSON.stringify(payload));
+  window.open(`https://vercel.new/clone?repo-data=${encoded}`, "_blank");
 };
