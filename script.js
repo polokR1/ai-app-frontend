@@ -35,7 +35,11 @@ async function handleChatSend() {
       body: JSON.stringify({ prompt: msg, code })
     });
     const data = await res.json();
-    addChatMessage("ai", data.result);
+    // Wyciągamy bloki kodu z odpowiedzi i wyświetlamy w panelu bocznym
+    showAiCodePreview(data.result);
+    // Dodaj tylko komentarz (bez kodów) do czatu
+    const explanation = extractExplanation(data.result);
+    if (explanation.trim()) addChatMessage("ai", explanation.trim());
   } catch (e) {
     addChatMessage("ai", "Błąd połączenia z backendem :(");
   }
@@ -51,12 +55,69 @@ function addChatMessage(who, text) {
   chat.scrollTop = chat.scrollHeight;
 }
 
+//// ========== PANEL PODGLĄDU KODU Z AI ========== ////
+function showAiCodePreview(aiReply) {
+  const preview = document.getElementById("ai-code-preview");
+  preview.innerHTML = "";
+  const codeBlocks = parseCodeBlocks(aiReply);
+  if (!codeBlocks.length) {
+    preview.innerHTML = "<em>Brak kodu w odpowiedzi AI.</em>";
+    return;
+  }
+  codeBlocks.forEach((block, idx) => {
+    const pre = document.createElement("pre");
+    pre.innerHTML = `<code>${escapeHtml(block.code)}</code>`;
+    // Dodaj przycisk do wstawiania kodu
+    const btn = document.createElement("button");
+    btn.className = "ai-insert-btn";
+    btn.textContent = "Wstaw do edytora";
+    btn.onclick = () => {
+      window.editor.setValue(block.code);
+      // Spróbuj ustawić odpowiedni język
+      if (block.lang) {
+        let monacoLang = block.lang === "js" ? "javascript" : block.lang;
+        monaco.editor.setModelLanguage(window.editor.getModel(), monacoLang);
+      }
+    };
+    pre.appendChild(btn);
+    preview.appendChild(pre);
+  });
+}
+
+// Parsuje bloki kodu w stylu ```lang\nkod```
+function parseCodeBlocks(aiReply) {
+  const blocks = [];
+  const regex = /```(\w*)\n([\s\S]+?)```/g;
+  let match;
+  while ((match = regex.exec(aiReply)) !== null) {
+    blocks.push({ lang: match[1], code: match[2] });
+  }
+  return blocks;
+}
+
+// Wyciąga tylko tekst przed pierwszym blokiem kodu (wyjaśnienie)
+function extractExplanation(aiReply) {
+  const firstBlock = aiReply.indexOf("```");
+  if (firstBlock === -1) return aiReply;
+  return aiReply.slice(0, firstBlock);
+}
+function escapeHtml(str) {
+  return str.replace(/[&<>"']/g, function(m) {
+    return ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    })[m];
+  });
+}
+
 //// ========== SZABLONY HTML ========== ////
 document.getElementById("loadTemplate").onclick = async () => {
   const selected = document.getElementById("templateSelect").value;
   if (!selected) return alert("Wybierz szablon");
 
-  // czyścimy explorer plików
   clearExplorer();
 
   const res = await fetch(`/templates/${selected}.html`);
@@ -77,14 +138,12 @@ zipInput.addEventListener("change", (e) => {
 
 loadZipBtn.addEventListener("click", async () => {
   if (!zipFile) return;
-  // czyścimy explorer i stan
   clearExplorer();
   allFileContents = {};
 
   const arrayBuffer = await zipFile.arrayBuffer();
   zipObj = await JSZip.loadAsync(arrayBuffer);
 
-  // wylistuj wszystkie pliki (bez folderów)
   const fileList = Object.keys(zipObj.files).filter(f => !zipObj.files[f].dir);
   if (fileList.length === 0) {
     alert("ZIP jest pusty!");
@@ -93,7 +152,6 @@ loadZipBtn.addEventListener("click", async () => {
 
   showFileExplorer(fileList);
 
-  // domyślnie wybierz index.html lub pierwszy plik
   let mainFile = fileList.find(f => f.match(/index\.html$/i)) || fileList[0];
   selectFileInExplorer(mainFile);
   await loadAndShowFile(mainFile);
@@ -107,7 +165,7 @@ function showFileExplorer(fileList) {
     el.textContent = fname;
     el.className = "file";
     el.onclick = async () => {
-      saveCurrentFile(); // zapisz zmiany bieżącego pliku
+      saveCurrentFile();
       selectFileInExplorer(fname);
       await loadAndShowFile(fname);
     };
@@ -122,19 +180,16 @@ function selectFileInExplorer(fname) {
 }
 
 async function loadAndShowFile(fname) {
-  // jeśli już mamy w pamięci, nie pobieraj jeszcze raz
   if (!allFileContents[fname]) {
     allFileContents[fname] = await zipObj.file(fname).async("string");
   }
   window.editor.setValue(allFileContents[fname]);
-  // automatycznie wykryj język w Monaco
   let ext = fname.split('.').pop().toLowerCase();
   let lang = (ext === "js") ? "javascript" : (ext === "css" ? "css" : (ext === "json" ? "json" : "html"));
   monaco.editor.setModelLanguage(window.editor.getModel(), lang);
 }
 
 function saveCurrentFile() {
-  // zapisz zmiany z edytora do allFileContents
   if (currentFilePath) {
     allFileContents[currentFilePath] = window.editor.getValue();
   }
@@ -152,14 +207,11 @@ document.getElementById("download").onclick = async () => {
   saveCurrentFile();
   let zip = new JSZip();
 
-  // jeśli mamy ZIPa – pobierz pełny projekt (ze zmianami)
   if (zipObj) {
-    // kopiuj wszystkie pliki z allFileContents
     for (const fname of Object.keys(allFileContents)) {
       zip.file(fname, allFileContents[fname]);
     }
   } else {
-    // jeśli nie – pobieramy tylko kod z edytora jako index.html
     zip.file("index.html", window.editor.getValue());
   }
   const blob = await zip.generateAsync({ type: "blob" });
@@ -176,7 +228,6 @@ document.getElementById("deployVercel").onclick = async () => {
   let code;
   if (zipObj) {
     saveCurrentFile();
-    // jeśli w ZIPie jest index.html, użyj go
     code = allFileContents["index.html"] || window.editor.getValue();
   } else {
     code = window.editor.getValue();
