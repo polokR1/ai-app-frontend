@@ -1,4 +1,4 @@
-const BACKEND_URL = "https://TWÓJ-BACKEND.onrender.com/ask";
+const BACKEND_URL = "https://https://jobtaste.onrender.com/ask";
 
 require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.34.1/min/vs' }});
 require(["vs/editor/editor.main"], function () {
@@ -21,6 +21,7 @@ document.getElementById("send").onclick = async () => {
   const data = await res.json();
   window.editor.setValue(data.result);
 };
+
 // --- ładowanie szablonu ---
 document.getElementById("loadTemplate").onclick = async () => {
   const selected = document.getElementById("templateSelect").value;
@@ -42,7 +43,8 @@ document.getElementById("download").onclick = () => {
   a.download = "app.html";
   a.click();
 };
-  // --- deploy do Vercel ---
+
+// --- deploy do Vercel ---
 document.getElementById("deployVercel").onclick = async () => {
   const code = window.editor.getValue();
 
