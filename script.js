@@ -1,5 +1,6 @@
 const BACKEND_URL = "https://jobtaste.onrender.com/ask";
 
+// Monaco Editor inicjalizacja
 require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.34.1/min/vs' }});
 require(["vs/editor/editor.main"], function () {
   window.editor = monaco.editor.create(document.getElementById('editor'), {
@@ -8,21 +9,43 @@ require(["vs/editor/editor.main"], function () {
   });
 });
 
-document.getElementById("send").onclick = async () => {
-  const prompt = document.getElementById("prompt").value;
-  const code = window.editor.getValue();
+// --- czat AI panel ---
+document.getElementById("chat-send").onclick = async () => {
+  const input = document.getElementById("chat-input");
+  const msg = input.value.trim();
+  if (!msg) return;
 
+  // Wyświetl wiadomość użytkownika
+  addChatMessage("user", msg);
+
+  // Tu możesz wysłać prompt do AI wraz z kodem z edytora:
+  /*
+  const code = window.editor.getValue();
   const res = await fetch(BACKEND_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, code })
+    body: JSON.stringify({ prompt: msg, code })
   });
-
   const data = await res.json();
-  window.editor.setValue(data.result);
+  addChatMessage("ai", data.result);
+  */
+
+  // Tymczasowa odpowiedź demo:
+  setTimeout(() => addChatMessage("ai", "Odpowiedź AI na: " + msg), 800);
+
+  input.value = "";
 };
 
-// --- ładowanie szablonu ---
+function addChatMessage(who, text) {
+  const chat = document.getElementById("chat-messages");
+  const div = document.createElement("div");
+  div.className = who === "user" ? "msg-user" : "msg-ai";
+  div.textContent = (who === "user" ? "Ty: " : "AI: ") + text;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// --- kodowanie panel: obsługa edytora i szablonów ---
 document.getElementById("loadTemplate").onclick = async () => {
   const selected = document.getElementById("templateSelect").value;
   if (!selected) return alert("Wybierz szablon");
@@ -48,7 +71,6 @@ document.getElementById("download").onclick = () => {
 document.getElementById("deployVercel").onclick = async () => {
   const code = window.editor.getValue();
 
-  // tworzymy plik README w payloadzie, bo Vercel tego wymaga
   const payload = {
     name: `ai-generated-app-${Date.now()}`,
     description: "App wygenerowana przez AI App Builder",
@@ -59,7 +81,6 @@ document.getElementById("deployVercel").onclick = async () => {
     }
   };
 
-  // otwarcie gotowego linku Vercel
   const encoded = encodeURIComponent(JSON.stringify(payload));
   window.open(`https://vercel.new/clone?repo-data=${encoded}`, "_blank");
 };
