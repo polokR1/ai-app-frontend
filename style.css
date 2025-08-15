@@ -1,6 +1,7 @@
-body {font-family: Arial, sans-serif; margin: 20px;}
+body {font-family: Arial, sans-serif; margin: 20px; background: #f7f7fa;}
 textarea {width: 100%;}
 button {margin-top: 5px; padding: 5px 10px;}
+hr {margin: 10px 0;}
 
 .main-wrapper {
   display: flex;
@@ -15,6 +16,7 @@ button {margin-top: 5px; padding: 5px 10px;}
   display: flex;
   flex-direction: column;
   height: 600px;
+  background: #fff;
 }
 
 #chat-messages {
@@ -48,4 +50,26 @@ button {margin-top: 5px; padding: 5px 10px;}
   text-align: left;
   color: #36a;
   margin-bottom: 2px;
+}
+
+#file-explorer {
+  margin: 10px 0 0 0;
+  font-size: 0.95em;
+  min-height: 32px;
+  background: #f0f0fa;
+  border: 1px solid #eee;
+  padding: 3px 6px;
+}
+
+#file-explorer .file {
+  cursor: pointer;
+  color: #333;
+  display: inline-block;
+  margin: 0 8px 0 0;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+#file-explorer .file.selected {
+  background: #dbeafe;
+  color: #013;
 }
