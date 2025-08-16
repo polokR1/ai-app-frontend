@@ -1,44 +1,265 @@
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI App Builder</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="https://unpkg.com/monaco-editor@0.34.1/min/vs/loader.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-</head>
-<body>
-  <h1>Moja fabryka aplikacji</h1>
-  <div class="main-wrapper">
-    <div class="chat-panel">
-      <div id="chat-messages"></div>
-      <textarea id="chat-input" placeholder="Napisz wiadomość do AI"></textarea>
-      <button id="chat-send">Wyślij</button>
-    </div>
-    <div class="code-panel">
-      <select id="templateSelect">
-        <option value="">-- wybierz szablon --</option>
-        <option value="calculator">Kalkulator</option>
-        <option value="landing">Landing Page</option>
-      </select>
-      <button id="loadTemplate">Wczytaj szablon</button>
-      <hr>
-      <label>Wczytaj własny szablon ZIP:
-        <input type="file" id="zipInput" accept=".zip" />
-      </label>
-      <button id="loadZip" disabled>Wczytaj ZIP</button>
+const BACKEND_URL = "https://jobtaste.onrender.com/ask";
 
-      <div id="file-explorer"></div>
-      <div id="editor" style="height:400px;border:1px solid #ccc;margin-top:10px"></div>
-      <button id="download">Pobierz cały projekt jako ZIP</button>
-      <button id="deployVercel">Deploy do Vercel</button>
-    </div>
-    <div class="ai-preview-panel">
-      <h3>Podgląd kodu AI</h3>
-      <div id="ai-code-preview"></div>
-    </div>
-  </div>
-  <script src="script.js"></script>
-</body>
-</html>
+// Monaco Editor inicjalizacja
+require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.34.1/min/vs' }});
+require(["vs/editor/editor.main"], function () {
+  window.editor = monaco.editor.create(document.getElementById('editor'), {
+    value: "<!-- wczytaj tutaj swój kod szablonu -->",
+    language: "html"
+  });
+  window.editor.onDidChangeModelContent(updateLivePreview);
+});
+
+//// ========== AI CHAT ========== ////
+document.getElementById("chat-send").onclick = handleChatSend;
+const chatInput = document.getElementById("chat-input");
+chatInput.addEventListener("keydown", function(event) {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    document.getElementById("chat-send").click();
+  }
+});
+
+async function handleChatSend() {
+  const input = document.getElementById("chat-input");
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  addChatMessage("user", msg);
+
+  // Zawsze wysyłamy CAŁY PROJEKT do AI
+  let filesToSend = {};
+  if (zipObj) {
+    saveCurrentFile();
+    filesToSend = { ...allFileContents };
+  } else {
+    filesToSend = { "index.html": window.editor.getValue() };
+  }
+
+  try {
+    const res = await fetch(BACKEND_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: msg, files: filesToSend })
+    });
+    const data = await res.json();
+    if (data.result && typeof data.result === "object") {
+      let changedFiles = Object.keys(data.result);
+      changedFiles.forEach(fname => {
+        allFileContents[fname] = data.result[fname];
+        if (!zipObj && fname === "index.html") {
+          window.editor.setValue(data.result[fname]);
+        }
+        if (zipObj && fname === currentFilePath) {
+          window.editor.setValue(data.result[fname]);
+        }
+      });
+      showAiCodePreview("Zmodyfikowane pliki: " + changedFiles.join(", "));
+      updateLivePreview();
+    } else {
+      showAiCodePreview("Nie udało się sparsować odpowiedzi AI.");
+    }
+  } catch (e) {
+    addChatMessage("ai", "Błąd połączenia z backendem :(");
+  }
+  input.value = "";
+}
+
+function addChatMessage(who, text) {
+  const chat = document.getElementById("chat-messages");
+  const div = document.createElement("div");
+  div.className = who === "user" ? "msg-user" : "msg-ai";
+  div.textContent = (who === "user" ? "Ty: " : "AI: ") + text;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+//// ========== PANEL PODGLĄDU KODU Z AI ========== ////
+function showAiCodePreview(aiReply) {
+  const preview = document.getElementById("ai-code-preview");
+  preview.innerHTML = "";
+  if (!aiReply) {
+    preview.innerHTML = "<em>Brak kodu w odpowiedzi AI.</em>";
+    return;
+  }
+  // Jeśli jest to lista plików, pokaż je
+  if (typeof aiReply === "string" && aiReply.startsWith("Zmodyfikowane pliki:")) {
+    preview.textContent = aiReply;
+    return;
+  }
+  // Jeśli chcesz wyświetlić kod – możesz dodać własne parsowanie
+}
+
+// ========== SZABLONY HTML ========== //
+document.getElementById("loadTemplate").onclick = async () => {
+  const selected = document.getElementById("templateSelect").value;
+  if (!selected) return alert("Wybierz szablon");
+
+  clearExplorer();
+
+  const res = await fetch(`/templates/${selected}.html`);
+  const templateCode = await res.text();
+  window.editor.setValue(templateCode);
+  monaco.editor.setModelLanguage(window.editor.getModel(), "html");
+  updateLivePreview();
+};
+
+//// ========== OBSŁUGA ZIPÓW ========== ////
+let zipFile, zipObj, currentFilePath, allFileContents = {};
+
+const zipInput = document.getElementById("zipInput");
+const loadZipBtn = document.getElementById("loadZip");
+
+zipInput.addEventListener("change", (e) => {
+  zipFile = e.target.files[0];
+  loadZipBtn.disabled = !zipFile;
+});
+
+loadZipBtn.addEventListener("click", async () => {
+  if (!zipFile) return;
+  clearExplorer();
+  allFileContents = {};
+
+  const arrayBuffer = await zipFile.arrayBuffer();
+  zipObj = await JSZip.loadAsync(arrayBuffer);
+
+  const fileList = Object.keys(zipObj.files).filter(f => !zipObj.files[f].dir);
+  if (fileList.length === 0) {
+    alert("ZIP jest pusty!");
+    return;
+  }
+
+  showFileExplorer(fileList);
+
+  let mainFile = fileList.find(f => f.match(/index\.html$/i)) || fileList[0];
+  selectFileInExplorer(mainFile);
+  await loadAndShowFile(mainFile);
+  updateLivePreview();
+});
+
+function showFileExplorer(fileList) {
+  const explorer = document.getElementById("file-explorer");
+  explorer.innerHTML = "";
+  fileList.forEach(fname => {
+    const el = document.createElement("span");
+    el.textContent = fname;
+    el.className = "file";
+    el.onclick = async () => {
+      saveCurrentFile();
+      selectFileInExplorer(fname);
+      await loadAndShowFile(fname);
+      updateLivePreview();
+    };
+    explorer.appendChild(el);
+  });
+}
+
+function selectFileInExplorer(fname) {
+  currentFilePath = fname;
+  const nodes = document.querySelectorAll("#file-explorer .file");
+  nodes.forEach(n => n.classList.toggle("selected", n.textContent === fname));
+}
+
+async function loadAndShowFile(fname) {
+  if (!allFileContents[fname]) {
+    allFileContents[fname] = await zipObj.file(fname).async("string");
+  }
+  window.editor.setValue(allFileContents[fname]);
+  let ext = fname.split('.').pop().toLowerCase();
+  let lang = (ext === "js") ? "javascript" : (ext === "css" ? "css" : (ext === "json" ? "json" : "html"));
+  monaco.editor.setModelLanguage(window.editor.getModel(), lang);
+}
+
+function saveCurrentFile() {
+  if (currentFilePath) {
+    allFileContents[currentFilePath] = window.editor.getValue();
+  }
+}
+
+function clearExplorer() {
+  document.getElementById("file-explorer").innerHTML = "";
+  zipObj = null;
+  currentFilePath = null;
+  allFileContents = {};
+}
+
+//// ========== POBIERANIE CAŁEGO PROJEKTU JAKO ZIP ========== ////
+document.getElementById("download").onclick = async () => {
+  saveCurrentFile();
+  let zip = new JSZip();
+
+  if (zipObj) {
+    for (const fname of Object.keys(allFileContents)) {
+      zip.file(fname, allFileContents[fname]);
+    }
+  } else {
+    zip.file("index.html", window.editor.getValue());
+  }
+  const blob = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "app.zip";
+  a.click();
+};
+
+//// ========== DEPLOY DO VERCEL (TYLKO HTML) ========== ////
+document.getElementById("deployVercel").onclick = async () => {
+  let code;
+  if (zipObj) {
+    saveCurrentFile();
+    code = allFileContents["index.html"] || window.editor.getValue();
+  } else {
+    code = window.editor.getValue();
+  }
+  const payload = {
+    name: `ai-generated-app-${Date.now()}`,
+    description: "App wygenerowana przez AI App Builder",
+    private: false,
+    files: {
+      "index.html": code,
+      "README.md": "# App wygenerowana z AI App Builder"
+    }
+  };
+  const encoded = encodeURIComponent(JSON.stringify(payload));
+  window.open(`https://vercel.new/clone?repo-data=${encoded}`, "_blank");
+};
+
+//// ========== PODGLĄD NA ŻYWO ========== ////
+function updateLivePreview() {
+  // Jeśli projekt ZIP i jest index.html, budujemy całość
+  let index = "";
+  if (zipObj && allFileContents["index.html"]) {
+    // Wstawiamy <style> i <script> inline jeśli są w projekcie
+    index = allFileContents["index.html"];
+    // Wstaw style.css
+    if (allFileContents["styles.css"]) {
+      // Dodaj <style> tuż przed </head> lub na końcu <head>
+      index = index.replace(
+        /<\/head>/i,
+        `<style>\n${allFileContents["styles.css"]}\n</style>\n</head>`
+      );
+    }
+    // Wstaw main.js
+    if (allFileContents["main.js"]) {
+      // Dodaj <script> przed </body> lub na końcu <body>
+      index = index.replace(
+        /<\/body>/i,
+        `<script>\n${allFileContents["main.js"]}\n</script>\n</body>`
+      );
+    }
+  } else {
+    // Pojedynczy plik
+    index = window.editor.getValue();
+  }
+  const iframe = document.getElementById("live-preview");
+  if (iframe) {
+    iframe.srcdoc = index;
+  }
+}
+
+// Dodaj podgląd na żywo na starcie
+window.addEventListener("DOMContentLoaded", () => {
+  updateLivePreview();
+});
