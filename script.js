@@ -19,7 +19,6 @@ chatInput.addEventListener("keydown", function(event) {
   }
 });
 
-// Jeśli mamy ZIP, wysyłamy tylko aktualnie edytowany plik!
 async function handleChatSend() {
   const input = document.getElementById("chat-input");
   const msg = input.value.trim();
@@ -27,19 +26,38 @@ async function handleChatSend() {
 
   addChatMessage("user", msg);
 
-  let code = window.editor.getValue();
+  // Zawsze wysyłamy CAŁY PROJEKT do AI
+  let filesToSend = {};
+  if (zipObj) {
+    saveCurrentFile();
+    filesToSend = { ...allFileContents };
+  } else {
+    filesToSend = { "index.html": window.editor.getValue() };
+  }
 
   try {
     const res = await fetch(BACKEND_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: msg, code })
+      body: JSON.stringify({ prompt: msg, files: filesToSend })
     });
     const data = await res.json();
-    showAiCodePreview(data.result);
-    // wyciągamy tylko opis (bez kodu) do czatu
-    const explanation = extractExplanation(data.result);
-    if (explanation.trim()) addChatMessage("ai", explanation.trim());
+    if (data.result && typeof data.result === "object") {
+      let changedFiles = Object.keys(data.result);
+      changedFiles.forEach(fname => {
+        allFileContents[fname] = data.result[fname];
+        if (!zipObj && fname === "index.html") {
+          window.editor.setValue(data.result[fname]);
+        }
+        if (zipObj && fname === currentFilePath) {
+          window.editor.setValue(data.result[fname]);
+        }
+      });
+      showAiCodePreview("Zmodyfikowane pliki: " + changedFiles.join(", "));
+    } else {
+      showAiCodePreview("Nie udało się sparsować odpowiedzi AI.");
+    }
+    // Opcjonalnie możesz dodać explanation do czatu jeśli AI coś napisało
   } catch (e) {
     addChatMessage("ai", "Błąd połączenia z backendem :(");
   }
@@ -59,65 +77,19 @@ function addChatMessage(who, text) {
 function showAiCodePreview(aiReply) {
   const preview = document.getElementById("ai-code-preview");
   preview.innerHTML = "";
-  const codeBlocks = parseCodeBlocks(aiReply);
-  if (!codeBlocks.length) {
+  if (!aiReply) {
     preview.innerHTML = "<em>Brak kodu w odpowiedzi AI.</em>";
     return;
   }
-  codeBlocks.forEach((block, idx) => {
-    const pre = document.createElement("pre");
-    pre.innerHTML = `<code>${escapeHtml(block.code)}</code>`;
-    // Dodaj przycisk do wstawiania kodu
-    const btn = document.createElement("button");
-    btn.className = "ai-insert-btn";
-    btn.textContent = "Wstaw do edytora";
-    btn.onclick = () => {
-      window.editor.setValue(block.code);
-      // Spróbuj ustawić odpowiedni język
-      if (block.lang) {
-        let monacoLang = block.lang === "js" ? "javascript" : block.lang;
-        monaco.editor.setModelLanguage(window.editor.getModel(), monacoLang);
-      }
-      // Jeśli jesteśmy w trybie ZIP, zapisz zmiany do bieżącego pliku!
-      if (zipObj && currentFilePath) {
-        allFileContents[currentFilePath] = block.code;
-      }
-    };
-    pre.appendChild(btn);
-    preview.appendChild(pre);
-  });
-}
-
-// Parsuje bloki kodu w stylu ```lang\nkod```
-function parseCodeBlocks(aiReply) {
-  const blocks = [];
-  const regex = /```(\w*)\n([\s\S]+?)```/g;
-  let match;
-  while ((match = regex.exec(aiReply)) !== null) {
-    blocks.push({ lang: match[1], code: match[2] });
+  // Jeśli jest to lista plików, pokaż je
+  if (typeof aiReply === "string" && aiReply.startsWith("Zmodyfikowane pliki:")) {
+    preview.textContent = aiReply;
+    return;
   }
-  return blocks;
+  // Jeśli chcesz wyświetlić kod – możesz dodać własne parsowanie
 }
 
-// Wyciąga tylko tekst przed pierwszym blokiem kodu (wyjaśnienie)
-function extractExplanation(aiReply) {
-  const firstBlock = aiReply.indexOf("```");
-  if (firstBlock === -1) return aiReply;
-  return aiReply.slice(0, firstBlock);
-}
-function escapeHtml(str) {
-  return str.replace(/[&<>"']/g, function(m) {
-    return ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;'
-    })[m];
-  });
-}
-
-//// ========== SZABLONY HTML ========== ////
+// ========== SZABLONY HTML ========== //
 document.getElementById("loadTemplate").onclick = async () => {
   const selected = document.getElementById("templateSelect").value;
   if (!selected) return alert("Wybierz szablon");
