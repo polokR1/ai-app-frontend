@@ -15,6 +15,19 @@ const chatInput = document.getElementById("chat-input");
 const chatBox = document.getElementById("chat-messages");
 const preview = document.getElementById("ai-code-preview");
 
+// Nowy input do wielu plików
+const multiFileInput = document.createElement("input");
+multiFileInput.type = "file";
+multiFileInput.multiple = true;
+multiFileInput.id = "multiFileInput";
+
+// Dodaj etykietę + przycisk do UI
+const fileLabel = document.createElement("label");
+fileLabel.textContent = "Wczytaj pliki:";
+fileLabel.appendChild(multiFileInput);
+
+document.querySelector(".code-panel").insertBefore(fileLabel, document.getElementById("file-explorer"));
+
 sendBtn.onclick = handleChatSend;
 chatInput.addEventListener("keydown", function(event) {
   if (event.key === "Enter" && !event.shiftKey) {
@@ -23,8 +36,29 @@ chatInput.addEventListener("keydown", function(event) {
   }
 });
 
-// ========== Stan plików / ZIP ==========
-let zipFile, zipObj, currentFilePath, allFileContents = {};
+// ========== Stan plików ==========
+let zipFile, zipObj, currentFilePath;
+let allFileContents = {};
+
+multiFileInput.addEventListener("change", async (e) => {
+  clearExplorer();
+  allFileContents = {};
+  const files = Array.from(e.target.files);
+  for (let f of files) {
+    const content = await f.arrayBuffer();
+    // zapisujemy jako base64, żeby można było wysłać binaria np. APK
+    allFileContents[f.name] = btoa(String.fromCharCode(...new Uint8Array(content)));
+    ensureFileInExplorer(f.name);
+  }
+  if (files.length > 0) {
+    currentFilePath = files[0].name;
+    if (files[0].type.startsWith("text")) {
+      window.editor.setValue(await files[0].text());
+    } else {
+      window.editor.setValue(`/* ${files[0].name} (plik binarny, wysłany jako base64) */`);
+    }
+  }
+});
 
 // ========== Wysyłka do backendu + obsługa odpowiedzi ==========
 async function handleChatSend() {
@@ -36,7 +70,9 @@ async function handleChatSend() {
   preview.innerHTML = "<em>Oczekiwanie na odpowiedź AI...</em>";
 
   let filesToSend = {};
-  if (zipObj) {
+  if (Object.keys(allFileContents).length > 0) {
+    filesToSend = { ...allFileContents };
+  } else if (zipObj) {
     saveCurrentFile();
     filesToSend = { ...allFileContents };
   } else {
@@ -69,12 +105,10 @@ async function handleChatSend() {
       changedFiles = applyFileChanges(files);
     }
 
-    // jeśli AI poda wiadomość → wyświetl
     if (message) {
       addChatMessage("ai", message);
     }
 
-    // jeśli są zmienione pliki, ale brak wiadomości → też pokaż w czacie podsumowanie zmian
     if (changedFiles.length > 0 && !message) {
       addChatMessage("ai", "Zaktualizowałem pliki: " + changedFiles.join(", "));
     }
@@ -138,14 +172,10 @@ function applyFileChanges(filesObj) {
   for (const [fname, content] of Object.entries(filesObj)) {
     allFileContents[fname] = content;
     ensureFileInExplorer(fname);
-    if (zipObj) {
-      if (fname === currentFilePath) {
+    if (fname === currentFilePath) {
+      try {
         window.editor.setValue(content);
-      }
-    } else {
-      if (fname === "index.html") {
-        window.editor.setValue(content);
-      }
+      } catch {}
     }
     changed.push(fname);
   }
@@ -183,67 +213,6 @@ function addChatMessage(who, text) {
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-// ========== ZIPY i inne funkcje (bez zmian) ==========
-const zipInput = document.getElementById("zipInput");
-const loadZipBtn = document.getElementById("loadZip");
-
-zipInput.addEventListener("change", (e) => {
-  zipFile = e.target.files[0];
-  loadZipBtn.disabled = !zipFile;
-});
-
-loadZipBtn.addEventListener("click", async () => {
-  if (!zipFile) return;
-  clearExplorer();
-  allFileContents = {};
-
-  const arrayBuffer = await zipFile.arrayBuffer();
-  zipObj = await JSZip.loadAsync(arrayBuffer);
-
-  const fileList = Object.keys(zipObj.files).filter(f => !zipObj.files[f].dir);
-  if (fileList.length === 0) {
-    alert("ZIP jest pusty!");
-    return;
-  }
-
-  showFileExplorer(fileList);
-  let mainFile = fileList.find(f => f.match(/index\.html$/i)) || fileList[0];
-  selectFileInExplorer(mainFile);
-  await loadAndShowFile(mainFile);
-});
-
-function showFileExplorer(fileList) {
-  const explorer = document.getElementById("file-explorer");
-  explorer.innerHTML = "";
-  fileList.forEach(fname => {
-    const el = document.createElement("span");
-    el.textContent = fname;
-    el.className = "file";
-    el.onclick = async () => {
-      saveCurrentFile();
-      selectFileInExplorer(fname);
-      await loadAndShowFile(fname);
-    };
-    explorer.appendChild(el);
-  });
-}
-
-function selectFileInExplorer(fname) {
-  currentFilePath = fname;
-  const nodes = document.querySelectorAll("#file-explorer .file");
-  nodes.forEach(n => n.classList.toggle("selected", n.textContent === fname));
-}
-
-async function loadAndShowFile(fname) {
-  if (!allFileContents[fname]) {
-    allFileContents[fname] = await zipObj.file(fname).async("string");
-  }
-  window.editor.setValue(allFileContents[fname]);
-  let ext = fname.split('.').pop().toLowerCase();
-  let lang = (ext === "js") ? "javascript" : (ext === "css" ? "css" : (ext === "json" ? "json" : "html"));
-  monaco.editor.setModelLanguage(window.editor.getModel(), lang);
-}
-
 function saveCurrentFile() {
   if (currentFilePath) {
     allFileContents[currentFilePath] = window.editor.getValue();
@@ -257,15 +226,27 @@ function clearExplorer() {
   allFileContents = {};
 }
 
+function selectFileInExplorer(fname) {
+  currentFilePath = fname;
+  const nodes = document.querySelectorAll("#file-explorer .file");
+  nodes.forEach(n => n.classList.toggle("selected", n.textContent === fname));
+}
+
+async function loadAndShowFile(fname) {
+  if (!allFileContents[fname]) return;
+  try {
+    const decoded = atob(allFileContents[fname]);
+    window.editor.setValue(decoded);
+  } catch {
+    window.editor.setValue(`/* ${fname} (plik binarny) */`);
+  }
+}
+
 document.getElementById("download").onclick = async () => {
   saveCurrentFile();
   let zip = new JSZip();
-  if (zipObj) {
-    for (const fname of Object.keys(allFileContents)) {
-      zip.file(fname, allFileContents[fname]);
-    }
-  } else {
-    zip.file("index.html", window.editor.getValue());
+  for (const fname of Object.keys(allFileContents)) {
+    zip.file(fname, allFileContents[fname]);
   }
   const blob = await zip.generateAsync({ type: "blob" });
   const url = URL.createObjectURL(blob);
@@ -276,13 +257,8 @@ document.getElementById("download").onclick = async () => {
 };
 
 document.getElementById("deployVercel").onclick = async () => {
-  let code;
-  if (zipObj) {
-    saveCurrentFile();
-    code = allFileContents["index.html"] || window.editor.getValue();
-  } else {
-    code = window.editor.getValue();
-  }
+  saveCurrentFile();
+  const code = allFileContents["index.html"] || window.editor.getValue();
   const payload = {
     name: `ai-generated-app-${Date.now()}`,
     description: "App wygenerowana przez AI App Builder",
