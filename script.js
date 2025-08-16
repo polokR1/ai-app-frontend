@@ -56,11 +56,13 @@ async function handleChatSend() {
         }
       });
       showAiCodePreview("Zmodyfikowane pliki: " + changedFiles.join(", "));
+      addChatMessage("ai", "Zaktualizowałem pliki: " + changedFiles.join(", "));
     } else if (typeof data.result === "string") {
       // Odpowiedź to zwykły tekst → pokaż w czacie
       addChatMessage("ai", data.result);
     } else {
       showAiCodePreview("Nie udało się sparsować odpowiedzi AI.");
+      addChatMessage("ai", "Nie udało się odczytać odpowiedzi AI.");
     }
   } catch (e) {
     addChatMessage("ai", "Błąd połączenia z backendem :(");
@@ -71,8 +73,13 @@ async function handleChatSend() {
 function addChatMessage(who, text) {
   const chat = document.getElementById("chat-messages");
   const div = document.createElement("div");
-  div.className = who === "user" ? "msg-user" : "msg-ai";
-  div.textContent = (who === "user" ? "Ty: " : "AI: ") + text;
+  div.className = who === "user" ? "msg msg-user" : "msg msg-ai";
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = text;
+
+  div.appendChild(bubble);
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
 }
