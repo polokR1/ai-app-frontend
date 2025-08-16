@@ -19,6 +19,7 @@ chatInput.addEventListener("keydown", function(event) {
   }
 });
 
+// Jeśli mamy ZIP, wysyłamy tylko aktualnie edytowany plik!
 async function handleChatSend() {
   const input = document.getElementById("chat-input");
   const msg = input.value.trim();
@@ -26,8 +27,8 @@ async function handleChatSend() {
 
   addChatMessage("user", msg);
 
-  // domyślnie wysyłamy kod z edytora
-  const code = window.editor.getValue();
+  let code = window.editor.getValue();
+
   try {
     const res = await fetch(BACKEND_URL, {
       method: "POST",
@@ -35,9 +36,8 @@ async function handleChatSend() {
       body: JSON.stringify({ prompt: msg, code })
     });
     const data = await res.json();
-    // Wyciągamy bloki kodu z odpowiedzi i wyświetlamy w panelu bocznym
     showAiCodePreview(data.result);
-    // Dodaj tylko komentarz (bez kodów) do czatu
+    // wyciągamy tylko opis (bez kodu) do czatu
     const explanation = extractExplanation(data.result);
     if (explanation.trim()) addChatMessage("ai", explanation.trim());
   } catch (e) {
@@ -77,6 +77,10 @@ function showAiCodePreview(aiReply) {
       if (block.lang) {
         let monacoLang = block.lang === "js" ? "javascript" : block.lang;
         monaco.editor.setModelLanguage(window.editor.getModel(), monacoLang);
+      }
+      // Jeśli jesteśmy w trybie ZIP, zapisz zmiany do bieżącego pliku!
+      if (zipObj && currentFilePath) {
+        allFileContents[currentFilePath] = block.code;
       }
     };
     pre.appendChild(btn);
@@ -123,6 +127,7 @@ document.getElementById("loadTemplate").onclick = async () => {
   const res = await fetch(`/templates/${selected}.html`);
   const templateCode = await res.text();
   window.editor.setValue(templateCode);
+  monaco.editor.setModelLanguage(window.editor.getModel(), "html");
 };
 
 //// ========== OBSŁUGA ZIPÓW ========== ////
