@@ -26,6 +26,7 @@ async function handleChatSend() {
 
   addChatMessage("user", msg);
 
+  // Zawsze wysyłamy CAŁY PROJEKT do AI
   let filesToSend = {};
   if (zipObj) {
     saveCurrentFile();
@@ -41,7 +42,9 @@ async function handleChatSend() {
       body: JSON.stringify({ prompt: msg, files: filesToSend })
     });
     const data = await res.json();
+
     if (data.result && typeof data.result === "object") {
+      // Odpowiedź zawiera pliki → traktuj jako zmiany w projekcie
       let changedFiles = Object.keys(data.result);
       changedFiles.forEach(fname => {
         allFileContents[fname] = data.result[fname];
@@ -53,6 +56,9 @@ async function handleChatSend() {
         }
       });
       showAiCodePreview("Zmodyfikowane pliki: " + changedFiles.join(", "));
+    } else if (typeof data.result === "string") {
+      // Odpowiedź to zwykły tekst → pokaż w czacie
+      addChatMessage("ai", data.result);
     } else {
       showAiCodePreview("Nie udało się sparsować odpowiedzi AI.");
     }
@@ -85,7 +91,7 @@ function showAiCodePreview(aiReply) {
   }
 }
 
-//// ========== SZABLONY HTML ========== ////
+// ========== SZABLONY HTML ========== //
 document.getElementById("loadTemplate").onclick = async () => {
   const selected = document.getElementById("templateSelect").value;
   if (!selected) return alert("Wybierz szablon");
@@ -98,7 +104,7 @@ document.getElementById("loadTemplate").onclick = async () => {
   monaco.editor.setModelLanguage(window.editor.getModel(), "html");
 };
 
-//// ========== OBSŁUGA ZIPÓW/APK ========== ////
+//// ========== OBSŁUGA ZIPÓW ========== ////
 let zipFile, zipObj, currentFilePath, allFileContents = {};
 
 const zipInput = document.getElementById("zipInput");
@@ -114,25 +120,20 @@ loadZipBtn.addEventListener("click", async () => {
   clearExplorer();
   allFileContents = {};
 
-  try {
-    const arrayBuffer = await zipFile.arrayBuffer();
-    const blob = new Blob([arrayBuffer]);
-    const res = await fetch("/decode-apk", {
-      method: "POST",
-      headers: { "Content-Type": "application/octet-stream" },
-      body: blob
-    });
-    const { files, fileList } = await res.json();
-    if (!fileList.length) throw new Error("Brak plików w APK");
-    allFileContents = files;
-    showFileExplorer(fileList);
-    let mainFile = fileList.find(f => f.match(/AndroidManifest\.xml$/i)) || fileList[0];
-    selectFileInExplorer(mainFile);
-    loadAndShowFile(mainFile);
-  } catch (e) {
-    alert("Błąd dekodowania APK: " + e.message);
-    console.error(e);
+  const arrayBuffer = await zipFile.arrayBuffer();
+  zipObj = await JSZip.loadAsync(arrayBuffer);
+
+  const fileList = Object.keys(zipObj.files).filter(f => !zipObj.files[f].dir);
+  if (fileList.length === 0) {
+    alert("ZIP jest pusty!");
+    return;
   }
+
+  showFileExplorer(fileList);
+
+  let mainFile = fileList.find(f => f.match(/index\.html$/i)) || fileList[0];
+  selectFileInExplorer(mainFile);
+  await loadAndShowFile(mainFile);
 });
 
 function showFileExplorer(fileList) {
@@ -142,10 +143,10 @@ function showFileExplorer(fileList) {
     const el = document.createElement("span");
     el.textContent = fname;
     el.className = "file";
-    el.onclick = () => {
+    el.onclick = async () => {
       saveCurrentFile();
       selectFileInExplorer(fname);
-      loadAndShowFile(fname);
+      await loadAndShowFile(fname);
     };
     explorer.appendChild(el);
   });
@@ -157,10 +158,13 @@ function selectFileInExplorer(fname) {
   nodes.forEach(n => n.classList.toggle("selected", n.textContent === fname));
 }
 
-function loadAndShowFile(fname) {
-  window.editor.setValue(allFileContents[fname] || "");
+async function loadAndShowFile(fname) {
+  if (!allFileContents[fname]) {
+    allFileContents[fname] = await zipObj.file(fname).async("string");
+  }
+  window.editor.setValue(allFileContents[fname]);
   let ext = fname.split('.').pop().toLowerCase();
-  let lang = ext === "xml" ? "xml" : ext === "smali" ? "java" : ext === "json" ? "json" : ext === "yml" ? "yaml" : "plaintext";
+  let lang = (ext === "js") ? "javascript" : (ext === "css" ? "css" : (ext === "json" ? "json" : "html"));
   monaco.editor.setModelLanguage(window.editor.getModel(), lang);
 }
 
