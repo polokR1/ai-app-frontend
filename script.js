@@ -26,7 +26,6 @@ async function handleChatSend() {
 
   addChatMessage("user", msg);
 
-  // Zawsze wysyłamy CAŁY PROJEKT do AI
   let filesToSend = {};
   if (zipObj) {
     saveCurrentFile();
@@ -57,7 +56,6 @@ async function handleChatSend() {
     } else {
       showAiCodePreview("Nie udało się sparsować odpowiedzi AI.");
     }
-    // Opcjonalnie możesz dodać explanation do czatu jeśli AI coś napisało
   } catch (e) {
     addChatMessage("ai", "Błąd połączenia z backendem :(");
   }
@@ -81,15 +79,13 @@ function showAiCodePreview(aiReply) {
     preview.innerHTML = "<em>Brak kodu w odpowiedzi AI.</em>";
     return;
   }
-  // Jeśli jest to lista plików, pokaż je
   if (typeof aiReply === "string" && aiReply.startsWith("Zmodyfikowane pliki:")) {
     preview.textContent = aiReply;
     return;
   }
-  // Jeśli chcesz wyświetlić kod – możesz dodać własne parsowanie
 }
 
-// ========== SZABLONY HTML ========== //
+//// ========== SZABLONY HTML ========== ////
 document.getElementById("loadTemplate").onclick = async () => {
   const selected = document.getElementById("templateSelect").value;
   if (!selected) return alert("Wybierz szablon");
@@ -102,7 +98,7 @@ document.getElementById("loadTemplate").onclick = async () => {
   monaco.editor.setModelLanguage(window.editor.getModel(), "html");
 };
 
-//// ========== OBSŁUGA ZIPÓW ========== ////
+//// ========== OBSŁUGA ZIPÓW/APK ========== ////
 let zipFile, zipObj, currentFilePath, allFileContents = {};
 
 const zipInput = document.getElementById("zipInput");
@@ -118,20 +114,25 @@ loadZipBtn.addEventListener("click", async () => {
   clearExplorer();
   allFileContents = {};
 
-  const arrayBuffer = await zipFile.arrayBuffer();
-  zipObj = await JSZip.loadAsync(arrayBuffer);
-
-  const fileList = Object.keys(zipObj.files).filter(f => !zipObj.files[f].dir);
-  if (fileList.length === 0) {
-    alert("ZIP jest pusty!");
-    return;
+  try {
+    const arrayBuffer = await zipFile.arrayBuffer();
+    const blob = new Blob([arrayBuffer]);
+    const res = await fetch("/decode-apk", {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: blob
+    });
+    const { files, fileList } = await res.json();
+    if (!fileList.length) throw new Error("Brak plików w APK");
+    allFileContents = files;
+    showFileExplorer(fileList);
+    let mainFile = fileList.find(f => f.match(/AndroidManifest\.xml$/i)) || fileList[0];
+    selectFileInExplorer(mainFile);
+    loadAndShowFile(mainFile);
+  } catch (e) {
+    alert("Błąd dekodowania APK: " + e.message);
+    console.error(e);
   }
-
-  showFileExplorer(fileList);
-
-  let mainFile = fileList.find(f => f.match(/index\.html$/i)) || fileList[0];
-  selectFileInExplorer(mainFile);
-  await loadAndShowFile(mainFile);
 });
 
 function showFileExplorer(fileList) {
@@ -141,10 +142,10 @@ function showFileExplorer(fileList) {
     const el = document.createElement("span");
     el.textContent = fname;
     el.className = "file";
-    el.onclick = async () => {
+    el.onclick = () => {
       saveCurrentFile();
       selectFileInExplorer(fname);
-      await loadAndShowFile(fname);
+      loadAndShowFile(fname);
     };
     explorer.appendChild(el);
   });
@@ -156,13 +157,10 @@ function selectFileInExplorer(fname) {
   nodes.forEach(n => n.classList.toggle("selected", n.textContent === fname));
 }
 
-async function loadAndShowFile(fname) {
-  if (!allFileContents[fname]) {
-    allFileContents[fname] = await zipObj.file(fname).async("string");
-  }
-  window.editor.setValue(allFileContents[fname]);
+function loadAndShowFile(fname) {
+  window.editor.setValue(allFileContents[fname] || "");
   let ext = fname.split('.').pop().toLowerCase();
-  let lang = (ext === "js") ? "javascript" : (ext === "css" ? "css" : (ext === "json" ? "json" : "html"));
+  let lang = ext === "xml" ? "xml" : ext === "smali" ? "java" : ext === "json" ? "json" : ext === "yml" ? "yaml" : "plaintext";
   monaco.editor.setModelLanguage(window.editor.getModel(), lang);
 }
 
