@@ -69,11 +69,13 @@ async function handleChatSend() {
       changedFiles = applyFileChanges(files);
     }
 
+    // jeśli AI poda wiadomość → wyświetl
     if (message) {
       addChatMessage("ai", message);
     }
 
-    if (changedFiles.length > 0) {
+    // jeśli są zmienione pliki, ale brak wiadomości → też pokaż w czacie podsumowanie zmian
+    if (changedFiles.length > 0 && !message) {
       addChatMessage("ai", "Zaktualizowałem pliki: " + changedFiles.join(", "));
     }
 
@@ -90,7 +92,7 @@ async function handleChatSend() {
 }
 
 function escapeHtml(str) {
-  return str.replace(/[&<>"]/g, c => ({
+  return str.replace(/[&<>\"]/g, c => ({
     '&': '&amp;',
     '<': '&lt;',
     '>': '&gt;',
