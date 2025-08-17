@@ -1,6 +1,6 @@
 const BACKEND_URL = "https://jobtaste.onrender.com/ask";
 
-// Monaco Editor
+// ========== Monaco Editor ==========
 require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.34.1/min/vs' }});
 require(["vs/editor/editor.main"], function () {
   window.editor = monaco.editor.create(document.getElementById('editor'), {
@@ -15,14 +15,6 @@ const chatInput = document.getElementById("chat-input");
 const chatBox = document.getElementById("chat-messages");
 const preview = document.getElementById("ai-code-preview");
 
-sendBtn.onclick = handleChatSend;
-chatInput.addEventListener("keydown", function(event) {
-  if (event.key === "Enter" && !event.shiftKey) {
-    event.preventDefault();
-    sendBtn.click();
-  }
-});
-
 // ========== Obsługa plików projektu ==========
 let allFileContents = {
   "index.html": "<!-- wczytaj tutaj swój kod szablonu -->",
@@ -34,7 +26,22 @@ let currentFilePath = "index.html";
 // ========== Obsługa obrazków ==========
 let imageFiles = {}; // { fileName: dataUrl }
 
-document.getElementById("imgInput").addEventListener("change", async (e) => {
+const imgInput = document.createElement("input");
+imgInput.type = "file";
+imgInput.accept = "image/*";
+imgInput.multiple = true;
+imgInput.id = "imgInput";
+const imgLabel = document.createElement("label");
+imgLabel.textContent = "Dodaj obrazek:";
+imgLabel.appendChild(imgInput);
+document.querySelector(".code-panel").insertBefore(imgLabel, document.getElementById("file-explorer"));
+
+const imgListDiv = document.createElement("div");
+imgListDiv.id = "img-list";
+imgListDiv.style.margin = "10px 0";
+document.querySelector(".code-panel").insertBefore(imgListDiv, document.getElementById("file-explorer"));
+
+imgInput.addEventListener("change", async (e) => {
   for (const file of e.target.files) {
     if (file.type.startsWith("image/")) {
       const reader = new FileReader();
@@ -57,7 +64,6 @@ function refreshImgList() {
     img.style.maxHeight = "60px";
     img.title = name;
     container.appendChild(img);
-    // Dodaj info o nazwie
     const span = document.createElement("span");
     span.textContent = name;
     span.style.fontSize = "0.8em";
@@ -66,7 +72,7 @@ function refreshImgList() {
   });
 }
 
-// ========== Prosty eksplorator plików ==========
+// ========== Eksplorator plików ==========
 const fileList = ["index.html", "styles.css", "main.js"];
 function showFileExplorer() {
   const explorer = document.getElementById("file-explorer");
@@ -120,6 +126,14 @@ document.getElementById("loadTemplate").onclick = async () => {
 };
 
 // ========== AI CHAT ==========
+sendBtn.onclick = handleChatSend;
+chatInput.addEventListener("keydown", function(event) {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    sendBtn.click();
+  }
+});
+
 async function handleChatSend() {
   saveCurrentFile();
   const msg = chatInput.value.trim();
@@ -135,7 +149,23 @@ async function handleChatSend() {
       body: JSON.stringify({ prompt: msg, files: allFileContents, images: imageFiles })
     });
 
-    const data = await res.json();
+    let rawText = await res.text();
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (e) {
+      preview.textContent = "Niepoprawna odpowiedź z API: " + rawText;
+      addChatMessage("ai", rawText);
+      setSending(false);
+      return;
+    }
+
+    if (data.error) {
+      preview.textContent = "Błąd backendu: " + (data.raw || JSON.stringify(data));
+      addChatMessage("ai", data.raw || JSON.stringify(data));
+      setSending(false);
+      return;
+    }
 
     if (data.result && typeof data.result === "object") {
       let changedFiles = Object.keys(data.result);
@@ -183,9 +213,7 @@ document.getElementById("download").onclick = async () => {
     zip.file(fname, allFileContents[fname] || "");
   }
   for (const [fname, dataUrl] of Object.entries(imageFiles)) {
-    // domyślnie PNG, ale można wyciągnąć typ z dataUrl
     const base64 = dataUrl.split(",")[1];
-    const mime = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/);
     zip.file(fname, base64, {base64: true});
   }
   const blob = await zip.generateAsync({ type: "blob" });
