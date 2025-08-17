@@ -173,29 +173,28 @@ async function handleChatSend() {
     let changedFiles = [];
 
     if (data.result && typeof data.result === "object") {
-      changedFiles = Object.keys(data.result);
-      changedFiles.forEach(fname => {
-        allFileContents[fname] = data.result[fname];
-        if (fname === currentFilePath) {
-          window.editor.setValue(data.result[fname]);
-        }
-      });
-      updateLivePreview();
-      aiMessage = changedFiles.length
-        ? "Zaktualizowałem pliki: " + changedFiles.join(", ")
-        : "";
-    }
+      // Wyświetl message zawsze w czacie (jeśli jest)
+      if (data.result.message) addChatMessage("ai", data.result.message);
 
-    // Jeśli AI zwróciła pole message – pokaż je. Jeśli nie, pokaż info o plikach lub surowy JSON.
-    if (data.message) {
-      addChatMessage("ai", data.message);
-    } else if (aiMessage) {
-      addChatMessage("ai", aiMessage);
+      // Jeśli są pliki, zaktualizuj projekt i podgląd
+      if (data.result.files && typeof data.result.files === "object") {
+        changedFiles = Object.keys(data.result.files);
+        changedFiles.forEach(fname => {
+          allFileContents[fname] = data.result.files[fname];
+          if (fname === currentFilePath) {
+            window.editor.setValue(data.result.files[fname]);
+          }
+        });
+        updateLivePreview();
+        aiMessage = changedFiles.length
+          ? "Zaktualizowałem pliki: " + changedFiles.join(", ")
+          : "";
+        preview.textContent = aiMessage || "Brak zmian w plikach.";
+      }
     } else {
-      addChatMessage("ai", JSON.stringify(data, null, 2));
+      addChatMessage("ai", "Brak odpowiedzi AI.");
     }
 
-    preview.textContent = aiMessage || "Brak zmian w plikach.";
   } catch (err) {
     addChatMessage("ai", "Błąd połączenia z backendem: " + err.message);
     preview.textContent = err.message;
