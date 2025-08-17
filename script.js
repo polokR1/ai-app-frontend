@@ -48,7 +48,7 @@ multiFileInput.addEventListener("change", async (e) => {
       reader.readAsDataURL(file);
       continue;
     }
-    // Pliki tekstowe i inne tekstowe (np. .txt, .json, .md)
+    // Pliki tekstowe
     const text = await file.text();
     allFileContents[file.name] = text;
     ensureFileInExplorer(file.name);
@@ -59,7 +59,7 @@ multiFileInput.addEventListener("change", async (e) => {
     selectFileInExplorer(currentFilePath);
     updateLivePreview();
   }
-  showFileExplorer(); // odśwież eksplorator plików
+  showFileExplorer();
 });
 
 // ========== Obsługa obrazków (dodatkowy input) ==========
@@ -151,25 +151,6 @@ function saveCurrentFile() {
     allFileContents[currentFilePath] = window.editor.getValue();
   }
 }
-
-// ========== Szablony ==========
-document.getElementById("loadTemplate").onclick = async () => {
-  const selected = document.getElementById("templateSelect").value;
-  if (!selected) return alert("Wybierz szablon");
-  saveCurrentFile();
-  const res = await fetch(`/templates/${selected}.html`);
-  const templateCode = await res.text();
-  allFileContents = {
-    "index.html": templateCode,
-    "styles.css": "",
-    "main.js": ""
-  };
-  currentFilePath = "index.html";
-  showFileExplorer();
-  loadAndShowFile("index.html");
-  selectFileInExplorer("index.html");
-  updateLivePreview();
-};
 
 // ========== AI CHAT ==========
 sendBtn.onclick = handleChatSend;
@@ -314,3 +295,20 @@ window.addEventListener("DOMContentLoaded", () => {
   refreshImgList();
   updateLivePreview();
 });
+
+// ========== Deploy do Vercel ==========
+document.getElementById("deployVercel").onclick = async () => {
+  saveCurrentFile();
+  const code = allFileContents["index.html"] || window.editor.getValue();
+  const payload = {
+    name: `ai-generated-app-${Date.now()}`,
+    description: "App wygenerowana przez AI App Builder",
+    private: false,
+    files: {
+      ...allFileContents,
+      "README.md": "# App wygenerowana z AI App Builder"
+    }
+  };
+  const encoded = encodeURIComponent(JSON.stringify(payload));
+  window.open(`https://vercel.new/clone?repo-data=${encoded}`, "_blank");
+};
