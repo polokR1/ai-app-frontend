@@ -26,6 +26,43 @@ let currentFilePath = "index.html";
 // ========== Obsługa obrazków ==========
 let imageFiles = {}; // { fileName: dataUrl }
 
+// ========== Obsługa wgrywania wielu plików ==========
+const multiFileInput = document.createElement("input");
+multiFileInput.type = "file";
+multiFileInput.multiple = true;
+multiFileInput.id = "multiFileInput";
+const multiFileLabel = document.createElement("label");
+multiFileLabel.textContent = "Wczytaj pliki szablonu:";
+multiFileLabel.appendChild(multiFileInput);
+document.querySelector(".code-panel").insertBefore(multiFileLabel, document.getElementById("file-explorer"));
+
+multiFileInput.addEventListener("change", async (e) => {
+  const files = Array.from(e.target.files);
+  for (let file of files) {
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        imageFiles[file.name] = evt.target.result;
+        refreshImgList();
+      };
+      reader.readAsDataURL(file);
+      continue;
+    }
+    // Pliki tekstowe i inne tekstowe (np. .txt, .json, .md)
+    const text = await file.text();
+    allFileContents[file.name] = text;
+    ensureFileInExplorer(file.name);
+  }
+  if (files.length > 0) {
+    currentFilePath = files[0].name;
+    window.editor.setValue(allFileContents[currentFilePath]);
+    selectFileInExplorer(currentFilePath);
+    updateLivePreview();
+  }
+  showFileExplorer(); // odśwież eksplorator plików
+});
+
+// ========== Obsługa obrazków (dodatkowy input) ==========
 const imgInput = document.createElement("input");
 imgInput.type = "file";
 imgInput.accept = "image/*";
@@ -73,22 +110,26 @@ function refreshImgList() {
 }
 
 // ========== Eksplorator plików ==========
-const fileList = ["index.html", "styles.css", "main.js"];
 function showFileExplorer() {
   const explorer = document.getElementById("file-explorer");
   explorer.innerHTML = "";
-  fileList.forEach(fname => {
-    const el = document.createElement("span");
-    el.textContent = fname;
-    el.className = "file";
-    el.onclick = () => {
-      saveCurrentFile();
-      selectFileInExplorer(fname);
-      loadAndShowFile(fname);
-      updateLivePreview();
-    };
-    explorer.appendChild(el);
+  Object.keys(allFileContents).forEach(fname => {
+    ensureFileInExplorer(fname);
   });
+}
+function ensureFileInExplorer(fname) {
+  const explorer = document.getElementById("file-explorer");
+  if ([...explorer.children].some(n => n.textContent === fname)) return;
+  const el = document.createElement("span");
+  el.textContent = fname;
+  el.className = "file";
+  el.onclick = () => {
+    saveCurrentFile();
+    selectFileInExplorer(fname);
+    loadAndShowFile(fname);
+    updateLivePreview();
+  };
+  explorer.appendChild(el);
 }
 function selectFileInExplorer(fname) {
   currentFilePath = fname;
@@ -98,7 +139,11 @@ function selectFileInExplorer(fname) {
 function loadAndShowFile(fname) {
   window.editor.setValue(allFileContents[fname] || "");
   let ext = fname.split('.').pop().toLowerCase();
-  let lang = (ext === "js") ? "javascript" : (ext === "css" ? "css" : (ext === "json" ? "json" : "html"));
+  let lang = (ext === "js") ? "javascript" :
+             (ext === "css") ? "css" :
+             (ext === "json") ? "json" :
+             (ext === "md") ? "markdown" :
+             (ext === "txt") ? "plaintext" : "html";
   monaco.editor.setModelLanguage(window.editor.getModel(), lang);
 }
 function saveCurrentFile() {
@@ -122,6 +167,7 @@ document.getElementById("loadTemplate").onclick = async () => {
   currentFilePath = "index.html";
   showFileExplorer();
   loadAndShowFile("index.html");
+  selectFileInExplorer("index.html");
   updateLivePreview();
 };
 
@@ -154,7 +200,6 @@ async function handleChatSend() {
     try {
       data = JSON.parse(rawText);
     } catch (e) {
-      // Surowa odpowiedź tekstowa (np. błąd serwera lub plain text)
       addChatMessage("ai", rawText);
       preview.textContent = "Niepoprawna odpowiedź z API: " + rawText;
       setSending(false);
@@ -162,7 +207,6 @@ async function handleChatSend() {
     }
 
     if (data.error) {
-      // Błąd backendu
       addChatMessage("ai", data.raw || JSON.stringify(data));
       preview.textContent = "Błąd backendu: " + (data.raw || JSON.stringify(data));
       setSending(false);
@@ -173,10 +217,7 @@ async function handleChatSend() {
     let changedFiles = [];
 
     if (data.result && typeof data.result === "object") {
-      // Wyświetl message zawsze w czacie (jeśli jest)
       if (data.result.message) addChatMessage("ai", data.result.message);
-
-      // Jeśli są pliki, zaktualizuj projekt i podgląd
       if (data.result.files && typeof data.result.files === "object") {
         changedFiles = Object.keys(data.result.files);
         changedFiles.forEach(fname => {
@@ -184,6 +225,7 @@ async function handleChatSend() {
           if (fname === currentFilePath) {
             window.editor.setValue(data.result.files[fname]);
           }
+          ensureFileInExplorer(fname);
         });
         updateLivePreview();
         aiMessage = changedFiles.length
@@ -191,6 +233,7 @@ async function handleChatSend() {
           : "";
         preview.textContent = aiMessage || "Brak zmian w plikach.";
       }
+      showFileExplorer();
     } else {
       addChatMessage("ai", "Brak odpowiedzi AI.");
     }
@@ -224,9 +267,9 @@ function addChatMessage(who, text) {
 document.getElementById("download").onclick = async () => {
   saveCurrentFile();
   let zip = new JSZip();
-  for (const fname of fileList) {
+  Object.keys(allFileContents).forEach(fname => {
     zip.file(fname, allFileContents[fname] || "");
-  }
+  });
   for (const [fname, dataUrl] of Object.entries(imageFiles)) {
     const base64 = dataUrl.split(",")[1];
     zip.file(fname, base64, {base64: true});
