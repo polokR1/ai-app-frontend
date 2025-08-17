@@ -154,32 +154,48 @@ async function handleChatSend() {
     try {
       data = JSON.parse(rawText);
     } catch (e) {
-      preview.textContent = "Niepoprawna odpowiedź z API: " + rawText;
+      // Surowa odpowiedź tekstowa (np. błąd serwera lub plain text)
       addChatMessage("ai", rawText);
+      preview.textContent = "Niepoprawna odpowiedź z API: " + rawText;
       setSending(false);
       return;
     }
 
     if (data.error) {
-      preview.textContent = "Błąd backendu: " + (data.raw || JSON.stringify(data));
+      // Błąd backendu
       addChatMessage("ai", data.raw || JSON.stringify(data));
+      preview.textContent = "Błąd backendu: " + (data.raw || JSON.stringify(data));
       setSending(false);
       return;
     }
 
+    let aiMessage = "";
+    let changedFiles = [];
+
     if (data.result && typeof data.result === "object") {
-      let changedFiles = Object.keys(data.result);
+      changedFiles = Object.keys(data.result);
       changedFiles.forEach(fname => {
         allFileContents[fname] = data.result[fname];
         if (fname === currentFilePath) {
           window.editor.setValue(data.result[fname]);
         }
       });
-      preview.textContent = "Zmodyfikowane pliki: " + changedFiles.join(", ");
       updateLivePreview();
-    } else {
-      preview.textContent = "Nie udało się sparsować odpowiedzi AI.";
+      aiMessage = changedFiles.length
+        ? "Zaktualizowałem pliki: " + changedFiles.join(", ")
+        : "";
     }
+
+    // Jeśli AI zwróciła pole message – pokaż je. Jeśli nie, pokaż info o plikach lub surowy JSON.
+    if (data.message) {
+      addChatMessage("ai", data.message);
+    } else if (aiMessage) {
+      addChatMessage("ai", aiMessage);
+    } else {
+      addChatMessage("ai", JSON.stringify(data, null, 2));
+    }
+
+    preview.textContent = aiMessage || "Brak zmian w plikach.";
   } catch (err) {
     addChatMessage("ai", "Błąd połączenia z backendem: " + err.message);
     preview.textContent = err.message;
