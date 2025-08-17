@@ -7,6 +7,7 @@ require(["vs/editor/editor.main"], function () {
     value: "<!-- wczytaj tutaj swój kod szablonu -->",
     language: "html"
   });
+  window.editor.onDidChangeModelContent(updateLivePreview);
 });
 
 // ========== Elementy UI ==========
@@ -14,19 +15,6 @@ const sendBtn = document.getElementById("chat-send");
 const chatInput = document.getElementById("chat-input");
 const chatBox = document.getElementById("chat-messages");
 const preview = document.getElementById("ai-code-preview");
-
-// Nowy input do wielu plików
-const multiFileInput = document.createElement("input");
-multiFileInput.type = "file";
-multiFileInput.multiple = true;
-multiFileInput.id = "multiFileInput";
-
-// Dodaj etykietę + przycisk do UI
-const fileLabel = document.createElement("label");
-fileLabel.textContent = "Wczytaj pliki:";
-fileLabel.appendChild(multiFileInput);
-
-document.querySelector(".code-panel").insertBefore(fileLabel, document.getElementById("file-explorer"));
 
 sendBtn.onclick = handleChatSend;
 chatInput.addEventListener("keydown", function(event) {
@@ -40,27 +28,98 @@ chatInput.addEventListener("keydown", function(event) {
 let zipFile, zipObj, currentFilePath;
 let allFileContents = {};
 
-multiFileInput.addEventListener("change", async (e) => {
-  clearExplorer();
-  allFileContents = {};
-  const files = Array.from(e.target.files);
-  for (let f of files) {
-    const content = await f.arrayBuffer();
-    // zapisujemy jako base64, żeby można było wysłać binaria np. APK
-    allFileContents[f.name] = btoa(String.fromCharCode(...new Uint8Array(content)));
-    ensureFileInExplorer(f.name);
-  }
-  if (files.length > 0) {
-    currentFilePath = files[0].name;
-    if (files[0].type.startsWith("text")) {
-      window.editor.setValue(await files[0].text());
-    } else {
-      window.editor.setValue(`/* ${files[0].name} (plik binarny, wysłany jako base64) */`);
-    }
-  }
+// ========== Obsługa ZIP ==========
+const zipInput = document.getElementById("zipInput");
+const loadZipBtn = document.getElementById("loadZip");
+
+zipInput.addEventListener("change", (e) => {
+  zipFile = e.target.files[0];
+  loadZipBtn.disabled = !zipFile;
 });
 
-// ========== Wysyłka do backendu + obsługa odpowiedzi ==========
+loadZipBtn.addEventListener("click", async () => {
+  if (!zipFile) return;
+  clearExplorer();
+  allFileContents = {};
+
+  const arrayBuffer = await zipFile.arrayBuffer();
+  zipObj = await JSZip.loadAsync(arrayBuffer);
+
+  const fileList = Object.keys(zipObj.files).filter(f => !zipObj.files[f].dir);
+  if (fileList.length === 0) {
+    alert("ZIP jest pusty!");
+    return;
+  }
+
+  showFileExplorer(fileList);
+
+  let mainFile = fileList.find(f => f.match(/index\.html$/i)) || fileList[0];
+  selectFileInExplorer(mainFile);
+  await loadAndShowFile(mainFile);
+  updateLivePreview();
+});
+
+function showFileExplorer(fileList) {
+  const explorer = document.getElementById("file-explorer");
+  explorer.innerHTML = "";
+  fileList.forEach(fname => {
+    const el = document.createElement("span");
+    el.textContent = fname;
+    el.className = "file";
+    el.onclick = async () => {
+      saveCurrentFile();
+      selectFileInExplorer(fname);
+      await loadAndShowFile(fname);
+      updateLivePreview();
+    };
+    explorer.appendChild(el);
+  });
+}
+
+function selectFileInExplorer(fname) {
+  currentFilePath = fname;
+  const nodes = document.querySelectorAll("#file-explorer .file");
+  nodes.forEach(n => n.classList.toggle("selected", n.textContent === fname));
+}
+
+async function loadAndShowFile(fname) {
+  if (!allFileContents[fname]) {
+    allFileContents[fname] = await zipObj.file(fname).async("string");
+  }
+  window.editor.setValue(allFileContents[fname]);
+  let ext = fname.split('.').pop().toLowerCase();
+  let lang = (ext === "js") ? "javascript" : (ext === "css" ? "css" : (ext === "json" ? "json" : "html"));
+  monaco.editor.setModelLanguage(window.editor.getModel(), lang);
+}
+
+function saveCurrentFile() {
+  if (currentFilePath) {
+    allFileContents[currentFilePath] = window.editor.getValue();
+  }
+}
+
+function clearExplorer() {
+  document.getElementById("file-explorer").innerHTML = "";
+  zipObj = null;
+  currentFilePath = null;
+  allFileContents = {};
+}
+
+// ========== Szablony HTML ==========
+document.getElementById("loadTemplate").onclick = async () => {
+  const selected = document.getElementById("templateSelect").value;
+  if (!selected) return alert("Wybierz szablon");
+
+  clearExplorer();
+
+  const res = await fetch(`/templates/${selected}.html`);
+  const templateCode = await res.text();
+  window.editor.setValue(templateCode);
+  monaco.editor.setModelLanguage(window.editor.getModel(), "html");
+  updateLivePreview();
+};
+
+// ========== AI CHAT ==========
 async function handleChatSend() {
   const msg = chatInput.value.trim();
   if (!msg) return;
@@ -70,9 +129,7 @@ async function handleChatSend() {
   preview.innerHTML = "<em>Oczekiwanie na odpowiedź AI...</em>";
 
   let filesToSend = {};
-  if (Object.keys(allFileContents).length > 0) {
-    filesToSend = { ...allFileContents };
-  } else if (zipObj) {
+  if (zipObj) {
     saveCurrentFile();
     filesToSend = { ...allFileContents };
   } else {
@@ -86,100 +143,29 @@ async function handleChatSend() {
       body: JSON.stringify({ prompt: msg, files: filesToSend })
     });
 
-    const responseText = await res.text();
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      preview.innerHTML = `<h4>Surowa odpowiedź:</h4><pre>${escapeHtml(responseText)}</pre>`;
-      addChatMessage("ai", responseText);
-      return;
-    }
+    const data = await res.json();
 
-    preview.innerHTML = `<h4>Surowa odpowiedź (JSON):</h4><pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
-
-    const { files, message } = normalizeResponse(data);
-
-    let changedFiles = [];
-    if (files && typeof files === 'object') {
-      changedFiles = applyFileChanges(files);
-    }
-
-    if (message) {
-      addChatMessage("ai", message);
-    }
-
-    if (changedFiles.length > 0 && !message) {
-      addChatMessage("ai", "Zaktualizowałem pliki: " + changedFiles.join(", "));
-    }
-
-    if (!message && changedFiles.length === 0) {
-      addChatMessage("ai", "Odpowiedź nie zawierała tekstu ani zmian plików. Sprawdź podgląd poniżej.");
+    if (data.result && typeof data.result === "object") {
+      let changedFiles = Object.keys(data.result);
+      changedFiles.forEach(fname => {
+        allFileContents[fname] = data.result[fname];
+        ensureFileInExplorer(fname);
+        if ((!zipObj && fname === "index.html") || (zipObj && fname === currentFilePath)) {
+          window.editor.setValue(data.result[fname]);
+        }
+      });
+      preview.textContent = "Zmodyfikowane pliki: " + changedFiles.join(", ");
+      updateLivePreview();
+    } else {
+      preview.textContent = "Nie udało się sparsować odpowiedzi AI.";
     }
   } catch (err) {
     addChatMessage("ai", "Błąd połączenia z backendem: " + err.message);
-    preview.innerHTML = `<pre>${escapeHtml(err.stack)}</pre>`;
+    preview.textContent = err.message;
   } finally {
     chatInput.value = "";
     setSending(false);
   }
-}
-
-function escapeHtml(str) {
-  return str.replace(/[&<>\"]/g, c => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;'
-  }[c]));
-}
-
-function normalizeResponse(data) {
-  if (data && typeof data.result !== 'undefined') {
-    if (typeof data.result === 'string') {
-      return { files: null, message: data.result };
-    }
-    if (data.result && typeof data.result === 'object') {
-      if (data.result.files && typeof data.result.files === 'object') {
-        return { files: data.result.files, message: data.result.message || null };
-      }
-      if (looksLikeFilesMap(data.result)) {
-        return { files: data.result, message: data.message || null };
-      }
-    }
-  }
-  if (data && data.files && typeof data.files === 'object') {
-    return { files: data.files, message: data.message || null };
-  }
-  const openaiMsg = data?.choices?.[0]?.message?.content || data?.message || data?.answer || data?.content;
-  if (typeof openaiMsg === 'string') {
-    return { files: null, message: openaiMsg };
-  }
-  if (typeof data?.rawText === 'string') {
-    return { files: null, message: data.rawText };
-  }
-  return { files: null, message: null };
-}
-
-function looksLikeFilesMap(obj) {
-  const keys = Object.keys(obj);
-  if (keys.length === 0) return false;
-  return keys.some(k => /\.[a-z0-9]+$/i.test(k)) && keys.every(k => typeof obj[k] === 'string');
-}
-
-function applyFileChanges(filesObj) {
-  const changed = [];
-  for (const [fname, content] of Object.entries(filesObj)) {
-    allFileContents[fname] = content;
-    ensureFileInExplorer(fname);
-    if (fname === currentFilePath) {
-      try {
-        window.editor.setValue(content);
-      } catch {}
-    }
-    changed.push(fname);
-  }
-  return changed;
 }
 
 function ensureFileInExplorer(fname) {
@@ -193,6 +179,7 @@ function ensureFileInExplorer(fname) {
     saveCurrentFile();
     selectFileInExplorer(fname);
     await loadAndShowFile(fname);
+    updateLivePreview();
   };
   explorer.appendChild(el);
 }
@@ -213,35 +200,7 @@ function addChatMessage(who, text) {
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-function saveCurrentFile() {
-  if (currentFilePath) {
-    allFileContents[currentFilePath] = window.editor.getValue();
-  }
-}
-
-function clearExplorer() {
-  document.getElementById("file-explorer").innerHTML = "";
-  zipObj = null;
-  currentFilePath = null;
-  allFileContents = {};
-}
-
-function selectFileInExplorer(fname) {
-  currentFilePath = fname;
-  const nodes = document.querySelectorAll("#file-explorer .file");
-  nodes.forEach(n => n.classList.toggle("selected", n.textContent === fname));
-}
-
-async function loadAndShowFile(fname) {
-  if (!allFileContents[fname]) return;
-  try {
-    const decoded = atob(allFileContents[fname]);
-    window.editor.setValue(decoded);
-  } catch {
-    window.editor.setValue(`/* ${fname} (plik binarny) */`);
-  }
-}
-
+// ========== Pobieranie ZIP ==========
 document.getElementById("download").onclick = async () => {
   saveCurrentFile();
   let zip = new JSZip();
@@ -256,6 +215,7 @@ document.getElementById("download").onclick = async () => {
   a.click();
 };
 
+// ========== Deploy do Vercel ==========
 document.getElementById("deployVercel").onclick = async () => {
   saveCurrentFile();
   const code = allFileContents["index.html"] || window.editor.getValue();
@@ -271,3 +231,25 @@ document.getElementById("deployVercel").onclick = async () => {
   const encoded = encodeURIComponent(JSON.stringify(payload));
   window.open(`https://vercel.new/clone?repo-data=${encoded}`, "_blank");
 };
+
+// ========== Podgląd na żywo ==========
+function updateLivePreview() {
+  // Budujemy index.html z plików projektu i inline-ujemy style + js
+  let html = allFileContents["index.html"] || window.editor.getValue();
+  if (allFileContents["styles.css"]) {
+    html = html.replace(
+      /<\/head>/i,
+      `<style>\n${allFileContents["styles.css"]}\n</style>\n</head>`
+    );
+  }
+  if (allFileContents["main.js"]) {
+    html = html.replace(
+      /<\/body>/i,
+      `<script>\n${allFileContents["main.js"]}\n</script>\n</body>`
+    );
+  }
+  document.getElementById("live-preview").srcdoc = html;
+}
+
+// Inicjalne wywołanie
+window.addEventListener("DOMContentLoaded", updateLivePreview);
