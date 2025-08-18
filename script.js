@@ -158,6 +158,18 @@ function clearChatHistory() {
   document.getElementById("chat-messages").innerHTML = "";
 }
 
+// ========== HISTORIA DLA AI ==========
+function getChatHistoryForAI() {
+  // Zwraca historię czatu w formacie [{role, content}], gdzie role: "user" lub "assistant"
+  const history = [];
+  document.querySelectorAll("#chat-messages .msg").forEach(div => {
+    const who = div.classList.contains("msg-user") ? "user" : "assistant";
+    const text = div.querySelector('.bubble').textContent;
+    history.push({ role: who, content: text });
+  });
+  return history;
+}
+
 // ========== OBSŁUGA DRZEWA PLIKÓW ==========
 function renderFileTree() {
   const tree = document.getElementById('file-tree');
@@ -454,11 +466,20 @@ async function handleChatSend() {
   addChatMessage("user", msg);
   setSending(true);
 
+  // Pobierz historię czatu do przekazania backendowi (wraz z nowym promptem)
+  // Dodaj aktualne pytanie do historii (bo addChatMessage już go dodał)
+  const chatHistory = getChatHistoryForAI();
+
   try {
     const res = await fetch("https://jobtaste.onrender.com/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: msg, files: allFileContents, images: imageFiles })
+      body: JSON.stringify({
+        prompt: msg,
+        files: allFileContents,
+        images: imageFiles,
+        chatHistory // NOWE!
+      })
     });
 
     let rawText = await res.text();
