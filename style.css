@@ -53,9 +53,9 @@ h1 {
 }
 
 .sidebar {
-  width: 310px;
-  min-width: 160px;
-  max-width: 480px;
+  width: 340px;
+  min-width: 170px;
+  max-width: 540px;
   background: var(--sidebar-bg);
   border-right: 2px solid var(--border);
   display: flex;
@@ -70,20 +70,25 @@ h1 {
   padding: 13px 12px 10px 12px;
   border-bottom: 2px solid var(--border);
   background: var(--panel-bg);
-  min-height: 220px;
-  max-height: 350px;
+  min-height: 230px;
+  max-height: 420px;
   display: flex;
   flex-direction: column;
-  height: 320px;
+  height: 380px;
   transition: max-height 0.3s;
 }
 .sidebar-chat.collapsed .collapsible-body {
-  display: none;
+  display: none !important;
 }
 .sidebar-chat.collapsed {
   max-height: 32px;
   min-height: 32px;
   height: 32px;
+}
+#chat-collapsible-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 #chat-messages {
   flex: 1 1 auto;
@@ -93,26 +98,26 @@ h1 {
   padding: 5px;
   background: var(--editor-bg);
   border-radius: 4px;
-  min-height: 60px;
-  max-height: 130px;
-  font-size: 0.98em;
+  min-height: 90px;
+  max-height: 200px;
+  font-size: 1em;
 }
 #chat-input {
   width: 100%;
-  min-height: 48px;
-  max-height: 70px;
-  margin-bottom: 5px;
+  min-height: 56px;
+  max-height: 100px;
+  margin-bottom: 6px;
   resize: vertical;
   background: var(--input-bg);
   color: #e1eaf2;
   border: 1px solid var(--input-border);
   border-radius: 4px;
-  padding: 7px 8px;
-  font-size: 1.08em;
+  padding: 9px 10px;
+  font-size: 1.1em;
 }
 #chat-send {
   width: 100%;
-  padding: 7px 0;
+  padding: 9px 0;
   border-radius: 4px;
   background: var(--button-bg);
   color: var(--button-text);
@@ -120,6 +125,7 @@ h1 {
   font-weight: bold;
   cursor: pointer;
   transition: background 0.18s, color 0.18s;
+  font-size: 1.07em;
 }
 #chat-send:hover {
   background: var(--button-hover);
@@ -398,6 +404,17 @@ h1 {
   border-radius: 8px;
   box-shadow: 0 1px 10px #0004;
   margin-bottom: 8px;
+}
+.resizer {
+  width: 6px;
+  background: transparent;
+  cursor: col-resize;
+  position: relative;
+  z-index: 10;
+  transition: background 0.2s;
+}
+.resizer:hover, .resizer.active {
+  background: #50fa7b44;
 }
 .modal-bg {
   position: fixed;
