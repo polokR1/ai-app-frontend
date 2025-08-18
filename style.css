@@ -46,16 +46,125 @@ h1 {
 .main-wrapper {
   display: flex;
   height: calc(100vh - 60px);
+  min-width: 650px;
+  min-height: 400px;
+  overflow: hidden;
+  position: relative;
 }
 
 .sidebar {
   width: 260px;
+  min-width: 120px;
+  max-width: 480px;
   background: var(--sidebar-bg);
   border-right: 2px solid var(--border);
   padding: 0 0 12px 0;
   display: flex;
   flex-direction: column;
-  min-width: 190px;
+  z-index: 2;
+}
+
+.resizer {
+  width: 6px;
+  background: transparent;
+  cursor: col-resize;
+  position: relative;
+  z-index: 10;
+  transition: background 0.2s;
+}
+.resizer:hover, .resizer.active {
+  background: #50fa7b44;
+}
+
+.editor-section {
+  flex: 1 1 500px;
+  min-width: 300px;
+  background: var(--panel-bg);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  z-index: 1;
+}
+#editor {
+  flex: 1 1 auto;
+  min-height: 300px;
+  background: var(--editor-bg);
+  border-bottom-left-radius: 7px;
+  border-bottom-right-radius: 7px;
+  margin-bottom: 0;
+}
+
+#tabs-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  background: var(--tab-bg);
+  min-height: 38px;
+  border-radius: 5px 5px 0 0;
+  border-bottom: 1.5px solid var(--border);
+  margin-bottom: 0px;
+  margin-top: 0;
+  padding-left: 8px;
+  overflow-x: auto;
+  box-shadow: 0 2px 8px #0004;
+}
+.tab {
+  background: var(--tab-bg);
+  color: var(--tab-text);
+  border: none;
+  border-radius: 5px 5px 0 0;
+  padding: 7px 22px 7px 30px;
+  margin-right: 4px;
+  margin-bottom: 0;
+  font-size: 1em;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.16s, color 0.2s;
+  min-width: 60px;
+  box-shadow: 0 1px 8px #0003;
+}
+.tab.active {
+  background: var(--tab-active);
+  color: var(--tab-text-active);
+  font-weight: bold;
+  z-index: 2;
+  box-shadow: 0 2px 12px 0 #50fa7b44;
+}
+.tab .close-btn {
+  position: absolute;
+  right: 7px;
+  top: 5px;
+  background: none;
+  border: none;
+  color: #aaa;
+  font-size: 1.1em;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  border-radius: 3px;
+  transition: background 0.18s, color 0.16s;
+}
+.tab .close-btn:hover {
+  color: var(--tab-close-hover);
+  background: #fff2;
+}
+.tab .tab-icon {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  font-size: 1em;
+}
+
+.right-panel {
+  width: 340px;
+  min-width: 180px;
+  max-width: 600px;
+  background: var(--panel-bg);
+  border-left: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+  z-index: 2;
 }
 
 .sidebar-header {
@@ -189,92 +298,6 @@ h1 {
   color: var(--button-text-hover);
 }
 
-.editor-section {
-  flex: 1 1 600px;
-  min-width: 400px;
-  background: var(--panel-bg);
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-}
-#editor {
-  flex: 1 1 auto;
-  min-height: 420px;
-  background: var(--editor-bg);
-  border-bottom-left-radius: 7px;
-  border-bottom-right-radius: 7px;
-  margin-bottom: 0;
-}
-
-#tabs-bar {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-end;
-  background: var(--tab-bg);
-  min-height: 38px;
-  border-radius: 5px 5px 0 0;
-  border-bottom: 1.5px solid var(--border);
-  margin-bottom: 0px;
-  margin-top: 0;
-  padding-left: 8px;
-  overflow-x: auto;
-  box-shadow: 0 2px 8px #0004;
-}
-.tab {
-  background: var(--tab-bg);
-  color: var(--tab-text);
-  border: none;
-  border-radius: 5px 5px 0 0;
-  padding: 7px 22px 7px 30px;
-  margin-right: 4px;
-  margin-bottom: 0;
-  font-size: 1em;
-  cursor: pointer;
-  position: relative;
-  transition: background 0.16s, color 0.2s;
-  min-width: 60px;
-  box-shadow: 0 1px 8px #0003;
-}
-.tab.active {
-  background: var(--tab-active);
-  color: var(--tab-text-active);
-  font-weight: bold;
-  z-index: 2;
-  box-shadow: 0 2px 12px 0 #50fa7b44;
-}
-.tab .close-btn {
-  position: absolute;
-  right: 7px;
-  top: 5px;
-  background: none;
-  border: none;
-  color: #aaa;
-  font-size: 1.1em;
-  cursor: pointer;
-  padding: 0;
-  margin: 0;
-  border-radius: 3px;
-  transition: background 0.18s, color 0.16s;
-}
-.tab .close-btn:hover {
-  color: var(--tab-close-hover);
-  background: #fff2;
-}
-.tab .tab-icon {
-  position: absolute;
-  left: 7px;
-  top: 7px;
-  font-size: 1em;
-}
-.right-panel {
-  width: 340px;
-  background: var(--panel-bg);
-  border-left: 2px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  justify-content: stretch;
-  min-width: 230px;
-}
 .chat-panel {
   padding: 14px 13px;
   border-bottom: 1.5px solid var(--border);
