@@ -44,9 +44,6 @@ function initUI() {
   updateLivePreview();
 
   // Obsługa przycisku dodawania pliku
-  document.getElementById('add-file-btn').onclick = () => {
-    document.getElementById('fileInput').click();
-  };
   document.getElementById('fileInput').onchange = async (e) => {
     for (const file of e.target.files) {
       if (!file.type.startsWith('image/')) {
@@ -66,7 +63,6 @@ function initUI() {
   document.getElementById('file-tree').ondrop = onFileDrop;
 
   // Dodawanie obrazków
-  document.getElementById('add-img-btn').onclick = () => document.getElementById('imgInput').click();
   document.getElementById('imgInput').addEventListener('change', onImgInput);
 
   // Pobieranie ZIP
@@ -89,14 +85,20 @@ function initUI() {
 window.toggleCollapse = function(panelId) {
   const panel = document.getElementById(panelId);
   const arrow = document.getElementById('arrow-' + panelId);
+  // Collapsible-body = następny element po headerze, lub id="chat-collapsible-body"
+  let body = null;
+  if (panelId === 'chat-panel') body = document.getElementById('chat-collapsible-body');
+  else body = panel.nextElementSibling;
   if (panel.classList.contains('collapsed')) {
     panel.classList.remove('collapsed');
     panel.classList.add('expanded');
     if (arrow) arrow.innerHTML = '&#9660;';
+    if (body) body.style.display = '';
   } else {
     panel.classList.remove('expanded');
     panel.classList.add('collapsed');
     if (arrow) arrow.innerHTML = '&#9654;';
+    if (body) body.style.display = 'none';
   }
 }
 
@@ -471,7 +473,7 @@ function resizerSetup() {
       function onMove(ev) {
         const dx = ev.clientX - startX;
         if (isLeft) {
-          let newA = Math.max(160, startA + dx);
+          let newA = Math.max(170, startA + dx);
           let newB = Math.max(180, startB - dx);
           panelA.style.width = newA + 'px';
           panelB.style.width = newB + 'px';
