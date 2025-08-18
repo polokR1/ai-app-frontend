@@ -1,261 +1,297 @@
-const BACKEND_URL = "https://jobtaste.onrender.com/ask";
+// ========== GLOBALNE DANE ==========
+let allFileContents = {
+  'index.html': '<!-- Zacznij tu tworzyć swój projekt -->',
+  'style.css': '',
+  'main.js': ''
+};
+let imageFiles = {}; // { filename: dataUrl }
+let openTabs = ['index.html'];
+let currentFilePath = 'index.html';
 
-// ========== Monaco Editor ==========
-require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.34.1/min/vs' }});
-require(["vs/editor/editor.main"], function () {
+const FILE_ICONS = {
+  html: '🟧',
+  js: '🟨',
+  css: '🟦',
+  md: '📘',
+  json: '🟦',
+  txt: '📑',
+  default: '📄'
+};
+
+// ========== MONACO EDITOR ==========
+require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.34.1/min/vs' } });
+require(['vs/editor/editor.main'], function () {
   window.editor = monaco.editor.create(document.getElementById('editor'), {
-    value: "<!-- wczytaj tutaj swój kod szablonu -->",
-    language: "html"
+    value: allFileContents['index.html'],
+    language: 'html',
+    theme: 'vs-dark',
+    fontSize: 15,
+    minimap: { enabled: false }
   });
-  window.editor.onDidChangeModelContent(updateLivePreview);
-
-  // ========== Inicjalizacja ==========
-  window.addEventListener("DOMContentLoaded", () => {
-    showFileExplorer();
-    selectFileInExplorer("index.html");
-    loadAndShowFile("index.html");
-    refreshImgList();
+  window.editor.onDidChangeModelContent(() => {
+    saveCurrentFile();
     updateLivePreview();
   });
+  initUI();
 });
 
-const sendBtn = document.getElementById("chat-send");
-const chatInput = document.getElementById("chat-input");
-const chatBox = document.getElementById("chat-messages");
-const preview = document.getElementById("ai-code-preview");
+// ========== INICJALIZACJA UI ==========
+function initUI() {
+  renderFileTree();
+  renderTabs();
+  selectFile('index.html');
+  renderImageList();
+  updateLivePreview();
 
-// ========== Obsługa plików projektu ==========
-let allFileContents = {
-  "index.html": "<!-- wczytaj tutaj swój kod szablonu -->",
-  "styles.css": "",
-  "main.js": ""
-};
-let currentFilePath = "index.html";
+  // Obsługa przycisku dodawania pliku
+  document.getElementById('add-file-btn').onclick = () => showAddFileDialog();
 
-// ========== Obsługa obrazków ==========
-let imageFiles = {}; // { fileName: dataUrl }
+  // Drag&drop plików
+  document.getElementById('file-tree').ondragover = e => { e.preventDefault(); };
+  document.getElementById('file-tree').ondrop = onFileDrop;
 
-// ========== Obsługa wgrywania wielu plików ==========
-const multiFileInput = document.createElement("input");
-multiFileInput.type = "file";
-multiFileInput.multiple = true;
-multiFileInput.id = "multiFileInput";
-const multiFileLabel = document.createElement("label");
-multiFileLabel.textContent = "Wczytaj pliki szablonu:";
-multiFileLabel.appendChild(multiFileInput);
-document.querySelector(".code-panel").insertBefore(multiFileLabel, document.getElementById("file-explorer"));
+  // Dodawanie obrazków
+  document.getElementById('add-img-btn').onclick = () => document.getElementById('imgInput').click();
+  document.getElementById('imgInput').addEventListener('change', onImgInput);
 
-multiFileInput.addEventListener("change", async (e) => {
-  const files = Array.from(e.target.files);
+  // Pobieranie ZIP
+  document.getElementById('download').onclick = downloadZip;
+
+  // Chat z AI
+  document.getElementById('chat-send').onclick = handleChatSend;
+  document.getElementById('chat-input').addEventListener('keydown', function (event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      document.getElementById('chat-send').click();
+    }
+  });
+}
+
+// ========== OBSŁUGA DRZEWA PLIKÓW ==========
+function renderFileTree() {
+  const tree = document.getElementById('file-tree');
+  tree.innerHTML = '';
+  Object.keys(allFileContents).sort().forEach(fname => {
+    const ext = fname.split('.').pop().toLowerCase();
+    const icon = FILE_ICONS[ext] || FILE_ICONS.default;
+    const li = document.createElement('li');
+    li.draggable = true;
+    li.className = (fname === currentFilePath) ? 'selected' : '';
+    li.innerHTML = `<span class="file-icon">${icon}</span>${fname}`;
+
+    li.onclick = (e) => {
+      if (e.target.className !== 'file-actions' && !e.target.className.includes('fa')) {
+        openFileTab(fname);
+      }
+    };
+    li.ondragstart = e => {
+      e.dataTransfer.setData('text/plain', fname);
+    };
+
+    // Akcje pliku (usuń, zmień nazwę)
+    const actions = document.createElement('span');
+    actions.className = 'file-actions';
+    actions.innerHTML = `
+      <button title="Zmień nazwę" onclick="event.stopPropagation();showRenameFileDialog('${fname}');">✏️</button>
+      <button title="Usuń plik" onclick="event.stopPropagation();deleteFile('${fname}');">🗑️</button>
+    `;
+    li.appendChild(actions);
+    tree.appendChild(li);
+  });
+}
+
+// Dodawanie nowego pliku
+function showAddFileDialog() {
+  showModal('Nowy plik', `
+    <label>Nazwa pliku:</label>
+    <input id="new-file-name" placeholder="np. komponent.js" autofocus>
+    <div class="modal-actions">
+      <button onclick="hideModal()">Anuluj</button>
+      <button onclick="addFileFromDialog()">Dodaj</button>
+    </div>
+  `);
+  document.getElementById('new-file-name').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addFileFromDialog();
+  });
+}
+function addFileFromDialog() {
+  const fname = document.getElementById('new-file-name').value.trim();
+  if (!fname || allFileContents[fname]) {
+    alert('Nieprawidłowa lub istniejąca nazwa pliku!');
+    return;
+  }
+  allFileContents[fname] = '';
+  openFileTab(fname);
+  renderFileTree();
+  hideModal();
+}
+
+// Zmiana nazwy pliku
+function showRenameFileDialog(oldName) {
+  showModal('Zmień nazwę pliku', `
+    <label>Nowa nazwa:</label>
+    <input id="rename-file-name" value="${oldName}" autofocus>
+    <div class="modal-actions">
+      <button onclick="hideModal()">Anuluj</button>
+      <button onclick="renameFile('${oldName}')">Zmień</button>
+    </div>
+  `);
+  document.getElementById('rename-file-name').addEventListener('keydown', e => {
+    if (e.key === 'Enter') renameFile(oldName);
+  });
+}
+function renameFile(oldName) {
+  const newName = document.getElementById('rename-file-name').value.trim();
+  if (!newName || allFileContents[newName]) {
+    alert('Niepoprawna lub istniejąca nazwa!');
+    return;
+  }
+  allFileContents[newName] = allFileContents[oldName];
+  delete allFileContents[oldName];
+  openTabs = openTabs.map(n => (n === oldName ? newName : n));
+  if (currentFilePath === oldName) currentFilePath = newName;
+  renderFileTree();
+  renderTabs();
+  selectFile(newName);
+  hideModal();
+}
+
+// Usuwanie pliku
+function deleteFile(fname) {
+  if (!confirm(`Usunąć plik ${fname}?`)) return;
+  delete allFileContents[fname];
+  openTabs = openTabs.filter(n => n !== fname);
+  if (currentFilePath === fname) {
+    currentFilePath = openTabs.length ? openTabs[0] : null;
+  }
+  renderFileTree();
+  renderTabs();
+  if (currentFilePath) selectFile(currentFilePath);
+  else window.editor.setValue('');
+  updateLivePreview();
+}
+
+// Obsługa drag&drop
+function onFileDrop(e) {
+  e.preventDefault();
+  const files = Array.from(e.dataTransfer.files);
   for (let file of files) {
-    if (file.type.startsWith("image/")) {
+    if (file.type.startsWith('image/')) {
       const reader = new FileReader();
-      reader.onload = function(evt) {
+      reader.onload = evt => {
         imageFiles[file.name] = evt.target.result;
-        refreshImgList();
+        renderImageList();
       };
       reader.readAsDataURL(file);
       continue;
     }
-    // Pliki tekstowe
-    const text = await file.text();
-    allFileContents[file.name] = text;
-    ensureFileInExplorer(file.name);
+    file.text().then(txt => {
+      allFileContents[file.name] = txt;
+      openFileTab(file.name);
+      renderFileTree();
+      renderTabs();
+      updateLivePreview();
+    });
   }
-  if (files.length > 0) {
-    currentFilePath = files[0].name;
-    window.editor.setValue(allFileContents[currentFilePath]);
-    selectFileInExplorer(currentFilePath);
-    updateLivePreview();
-  }
-  showFileExplorer();
-});
+}
 
-// ========== Obsługa obrazków (dodatkowy input) ==========
-const imgInput = document.createElement("input");
-imgInput.type = "file";
-imgInput.accept = "image/*";
-imgInput.multiple = true;
-imgInput.id = "imgInput";
-const imgLabel = document.createElement("label");
-imgLabel.textContent = "Dodaj obrazek:";
-imgLabel.appendChild(imgInput);
-document.querySelector(".code-panel").insertBefore(imgLabel, document.getElementById("file-explorer"));
-
-const imgListDiv = document.createElement("div");
-imgListDiv.id = "img-list";
-imgListDiv.style.margin = "10px 0";
-document.querySelector(".code-panel").insertBefore(imgListDiv, document.getElementById("file-explorer"));
-
-imgInput.addEventListener("change", async (e) => {
-  for (const file of e.target.files) {
-    if (file.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = function(evt) {
-        imageFiles[file.name] = evt.target.result;
-        refreshImgList();
-      };
-      reader.readAsDataURL(file);
-    }
-  }
-});
-
-function refreshImgList() {
-  const container = document.getElementById("img-list");
-  container.innerHTML = "";
-  Object.entries(imageFiles).forEach(([name, dataUrl]) => {
-    const img = document.createElement("img");
-    img.src = dataUrl;
-    img.style.maxWidth = "60px";
-    img.style.maxHeight = "60px";
-    img.title = name;
-    container.appendChild(img);
-    const span = document.createElement("span");
-    span.textContent = name;
-    span.style.fontSize = "0.8em";
-    span.style.marginRight = "10px";
-    container.appendChild(span);
+// ========== OBSŁUGA ZAKŁADEK ==========
+function renderTabs() {
+  const bar = document.getElementById('tabs-bar');
+  bar.innerHTML = '';
+  openTabs.forEach(fname => {
+    const ext = fname.split('.').pop().toLowerCase();
+    const icon = FILE_ICONS[ext] || FILE_ICONS.default;
+    const tab = document.createElement('div');
+    tab.className = 'tab' + (fname === currentFilePath ? ' active' : '');
+    tab.innerHTML = `<span class="tab-icon">${icon}</span>${fname}
+    <button class="close-btn" title="Zamknij" onclick="closeTab('${fname}', event)">&times;</button>`;
+    tab.onclick = () => openFileTab(fname);
+    bar.appendChild(tab);
   });
 }
-
-// ========== Eksplorator plików ==========
-function showFileExplorer() {
-  const explorer = document.getElementById("file-explorer");
-  explorer.innerHTML = "";
-  Object.keys(allFileContents).forEach(fname => {
-    ensureFileInExplorer(fname);
-  });
+function openFileTab(fname) {
+  if (!openTabs.includes(fname)) openTabs.push(fname);
+  selectFile(fname);
+  renderTabs();
 }
-function ensureFileInExplorer(fname) {
-  const explorer = document.getElementById("file-explorer");
-  if ([...explorer.children].some(n => n.textContent === fname)) return;
-  const el = document.createElement("span");
-  el.textContent = fname;
-  el.className = "file";
-  el.onclick = () => {
-    saveCurrentFile();
-    selectFileInExplorer(fname);
-    loadAndShowFile(fname);
-    updateLivePreview();
-  };
-  explorer.appendChild(el);
-}
-function selectFileInExplorer(fname) {
+function selectFile(fname) {
+  saveCurrentFile();
   currentFilePath = fname;
-  const nodes = document.querySelectorAll("#file-explorer .file");
-  nodes.forEach(n => n.classList.toggle("selected", n.textContent === fname));
+  renderFileTree();
+  renderTabs();
+  loadFileInEditor(fname);
 }
-function loadAndShowFile(fname) {
-  if (!window.editor || typeof window.editor.setValue !== "function") return;
-  window.editor.setValue(allFileContents[fname] || "");
+function closeTab(fname, e) {
+  if (e) e.stopPropagation();
+  openTabs = openTabs.filter(n => n !== fname);
+  if (currentFilePath === fname) {
+    currentFilePath = openTabs.length ? openTabs[openTabs.length - 1] : null;
+    if (currentFilePath) loadFileInEditor(currentFilePath);
+    else window.editor.setValue('');
+  }
+  renderTabs();
+}
+
+// ========== OBSŁUGA EDYTORA ==========
+function loadFileInEditor(fname) {
+  if (!window.editor) return;
+  const val = allFileContents[fname] || '';
+  window.editor.setValue(val);
   let ext = fname.split('.').pop().toLowerCase();
-  let lang = (ext === "js") ? "javascript" :
-             (ext === "css") ? "css" :
-             (ext === "json") ? "json" :
-             (ext === "md") ? "markdown" :
-             (ext === "txt") ? "plaintext" : "html";
+  let lang = ({
+    js: 'javascript',
+    css: 'css',
+    html: 'html',
+    md: 'markdown',
+    json: 'json',
+    txt: 'plaintext'
+  })[ext] || 'plaintext';
   monaco.editor.setModelLanguage(window.editor.getModel(), lang);
 }
 function saveCurrentFile() {
-  if (currentFilePath && window.editor && typeof window.editor.getValue === "function") {
+  if (currentFilePath && window.editor) {
     allFileContents[currentFilePath] = window.editor.getValue();
   }
 }
 
-// ========== AI CHAT ==========
-sendBtn.onclick = handleChatSend;
-chatInput.addEventListener("keydown", function(event) {
-  if (event.key === "Enter" && !event.shiftKey) {
-    event.preventDefault();
-    sendBtn.click();
-  }
-});
-
-async function handleChatSend() {
-  saveCurrentFile();
-  const msg = chatInput.value.trim();
-  if (!msg) return;
-  addChatMessage("user", msg);
-  setSending(true);
-  preview.innerHTML = "<em>Oczekiwanie na odpowiedź AI...</em>";
-
-  try {
-    const res = await fetch(BACKEND_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: msg, files: allFileContents, images: imageFiles })
-    });
-
-    let rawText = await res.text();
-    let data;
-    try {
-      data = JSON.parse(rawText);
-    } catch (e) {
-      addChatMessage("ai", rawText);
-      preview.textContent = "Niepoprawna odpowiedź z API: " + rawText;
-      setSending(false);
-      return;
-    }
-
-    if (data.error) {
-      addChatMessage("ai", data.raw || JSON.stringify(data));
-      preview.textContent = "Błąd backendu: " + (data.raw || JSON.stringify(data));
-      setSending(false);
-      return;
-    }
-
-    let aiMessage = "";
-    let changedFiles = [];
-
-    if (data.result && typeof data.result === "object") {
-      if (data.result.message) addChatMessage("ai", data.result.message);
-      if (data.result.files && typeof data.result.files === "object") {
-        changedFiles = Object.keys(data.result.files);
-        changedFiles.forEach(fname => {
-          allFileContents[fname] = data.result.files[fname];
-          if (fname === currentFilePath) {
-            window.editor.setValue(data.result.files[fname]);
-          }
-          ensureFileInExplorer(fname);
-        });
+// ========== OBRAZKI ==========
+function onImgInput(e) {
+  for (const file of e.target.files) {
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = evt => {
+        imageFiles[file.name] = evt.target.result;
+        renderImageList();
         updateLivePreview();
-        aiMessage = changedFiles.length
-          ? "Zaktualizowałem pliki: " + changedFiles.join(", ")
-          : "";
-        preview.textContent = aiMessage || "Brak zmian w plikach.";
-      }
-      showFileExplorer();
-    } else {
-      addChatMessage("ai", "Brak odpowiedzi AI.");
+      };
+      reader.readAsDataURL(file);
     }
-
-  } catch (err) {
-    addChatMessage("ai", "Błąd połączenia z backendem: " + err.message);
-    preview.textContent = err.message;
-  } finally {
-    chatInput.value = "";
-    setSending(false);
   }
+  e.target.value = '';
+}
+function renderImageList() {
+  const div = document.getElementById('img-list');
+  div.innerHTML = '';
+  Object.entries(imageFiles).forEach(([name, dataUrl]) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'img-item';
+    wrap.title = name;
+    wrap.innerHTML = `
+      <img src="${dataUrl}">
+      <button class="img-remove" title="Usuń" onclick="removeImage('${name}')">×</button>`;
+    div.appendChild(wrap);
+  });
+}
+function removeImage(name) {
+  if (!confirm(`Usunąć obrazek ${name}?`)) return;
+  delete imageFiles[name];
+  renderImageList();
+  updateLivePreview();
 }
 
-function setSending(isSending) {
-  sendBtn.disabled = isSending;
-  sendBtn.textContent = isSending ? "Wysyłam..." : "Wyślij";
-}
-
-function addChatMessage(who, text) {
-  const div = document.createElement("div");
-  div.className = who === "user" ? "msg msg-user" : "msg msg-ai";
-  const bubble = document.createElement("div");
-  bubble.className = "bubble";
-  bubble.textContent = text;
-  div.appendChild(bubble);
-  chatBox.appendChild(div);
-  chatBox.scrollTop = chatBox.scrollHeight;
-}
-
-// ========== Pobieranie ZIP ==========
-document.getElementById("download").onclick = async () => {
+// ========== POBIERANIE ZIP ==========
+async function downloadZip() {
   saveCurrentFile();
   if (typeof JSZip === "undefined") {
     alert("Nie udało się załadować biblioteki JSZip!");
@@ -284,16 +320,16 @@ document.getElementById("download").onclick = async () => {
   } catch (e) {
     alert("Błąd podczas generowania ZIP: " + e.message);
   }
-};
+}
 
-// ========== Podgląd na żywo ==========
+// ========== PODGLĄD NA ŻYWO ==========
 function updateLivePreview() {
   saveCurrentFile();
   let html = allFileContents["index.html"] || "";
-  if (allFileContents["styles.css"]) {
+  if (allFileContents["style.css"]) {
     html = html.replace(
       /<\/head>/i,
-      `<style>\n${allFileContents["styles.css"]}\n</style>\n</head>`
+      `<style>\n${allFileContents["style.css"]}\n</style>\n</head>`
     );
   }
   if (allFileContents["main.js"]) {
@@ -310,19 +346,89 @@ function updateLivePreview() {
   document.getElementById("live-preview").srcdoc = html;
 }
 
-// ========== Deploy do Vercel ==========
-document.getElementById("deployVercel").onclick = async () => {
+// ========== MODAL ==========
+function showModal(title, html) {
+  document.getElementById('modal').innerHTML = `<h3 style="margin-top:0;">${title}</h3>${html}`;
+  document.getElementById('modal-bg').style.display = 'flex';
+}
+function hideModal() {
+  document.getElementById('modal-bg').style.display = 'none';
+}
+
+// ========== CHAT Z AI ==========
+async function handleChatSend() {
   saveCurrentFile();
-  const code = allFileContents["index.html"] || window.editor.getValue();
-  const payload = {
-    name: `ai-generated-app-${Date.now()}`,
-    description: "App wygenerowana przez AI App Builder",
-    private: false,
-    files: {
-      ...allFileContents,
-      "README.md": "# App wygenerowana z AI App Builder"
+  const msg = document.getElementById('chat-input').value.trim();
+  if (!msg) return;
+  addChatMessage("user", msg);
+  setSending(true);
+
+  try {
+    const res = await fetch("https://jobtaste.onrender.com/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: msg, files: allFileContents, images: imageFiles })
+    });
+
+    let rawText = await res.text();
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (e) {
+      addChatMessage("ai", rawText);
+      setSending(false);
+      return;
     }
-  };
-  const encoded = encodeURIComponent(JSON.stringify(payload));
-  window.open(`https://vercel.new/clone?repo-data=${encoded}`, "_blank");
-};
+
+    if (data.error) {
+      addChatMessage("ai", data.raw || JSON.stringify(data));
+      setSending(false);
+      return;
+    }
+
+    if (data.result && typeof data.result === "object") {
+      if (data.result.message) addChatMessage("ai", data.result.message);
+      if (data.result.files && typeof data.result.files === "object") {
+        Object.keys(data.result.files).forEach(fname => {
+          allFileContents[fname] = data.result.files[fname];
+          if (!openTabs.includes(fname)) openTabs.push(fname);
+        });
+        renderTabs();
+        renderFileTree();
+        updateLivePreview();
+      }
+    } else {
+      addChatMessage("ai", "Brak odpowiedzi AI.");
+    }
+  } catch (err) {
+    addChatMessage("ai", "Błąd połączenia z backendem: " + err.message);
+  } finally {
+    document.getElementById('chat-input').value = '';
+    setSending(false);
+  }
+}
+function setSending(isSending) {
+  const btn = document.getElementById('chat-send');
+  btn.disabled = isSending;
+  btn.textContent = isSending ? "Wysyłam..." : "Wyślij";
+}
+function addChatMessage(who, text) {
+  const div = document.createElement("div");
+  div.className = who === "user" ? "msg msg-user" : "msg msg-ai";
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = text;
+  div.appendChild(bubble);
+  document.getElementById("chat-messages").appendChild(div);
+  document.getElementById("chat-messages").scrollTop = document.getElementById("chat-messages").scrollHeight;
+}
+
+// ========== EKSPORT FUNKCJI DO HTML ==========
+window.showRenameFileDialog = showRenameFileDialog;
+window.renameFile = renameFile;
+window.deleteFile = deleteFile;
+window.removeImage = removeImage;
+window.closeTab = closeTab;
+window.hideModal = hideModal;
+window.openFileTab = openFileTab;
+window.addFileFromDialog = addFileFromDialog;
