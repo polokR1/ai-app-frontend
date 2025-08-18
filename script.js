@@ -1,32 +1,116 @@
 const BACKEND_URL = "https://jobtaste.onrender.com/ask";
 
 // ========== Monaco Editor ==========
-require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.34.1/min/vs' }});
+require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.34.1/min/vs' } });
 require(["vs/editor/editor.main"], function () {
   window.editor = monaco.editor.create(document.getElementById('editor'), {
     value: "<!-- wczytaj tutaj swój kod szablonu -->",
-    language: "html"
+    language: "html",
+    theme: "vs-dark"
   });
   window.editor.onDidChangeModelContent(updateLivePreview);
 });
 
-const sendBtn = document.getElementById("chat-send");
-const chatInput = document.getElementById("chat-input");
-const chatBox = document.getElementById("chat-messages");
-const preview = document.getElementById("ai-code-preview");
-
-// ========== Obsługa plików projektu ==========
+// ========== Pliki projektu ==========
 let allFileContents = {
   "index.html": "<!-- wczytaj tutaj swój kod szablonu -->",
   "styles.css": "",
   "main.js": ""
 };
+let imageFiles = {};
+let openTabs = ["index.html"]; // Zawsze na start index.html
 let currentFilePath = "index.html";
 
-// ========== Obsługa obrazków ==========
-let imageFiles = {}; // { fileName: dataUrl }
+// ========== Eksplorator plików ==========
+function showFileExplorer() {
+  const explorer = document.getElementById("file-explorer");
+  explorer.innerHTML = "";
+  Object.keys(allFileContents).forEach(fname => {
+    const el = document.createElement("span");
+    el.textContent = fname;
+    el.className = "file" + (fname === currentFilePath ? " selected" : "");
+    el.onclick = () => openFileTab(fname);
+    explorer.appendChild(el);
+  });
+}
 
-// ========== Obsługa wgrywania wielu plików ==========
+// ========== Tabs ==========
+function renderTabs() {
+  const tabsBar = document.getElementById("tabs-bar");
+  tabsBar.innerHTML = "";
+  openTabs.forEach(fname => {
+    const tab = document.createElement("div");
+    tab.className = "tab" + (fname === currentFilePath ? " active" : "");
+    tab.textContent = fname;
+    tab.onclick = () => switchTab(fname);
+
+    // Zamknięcie zakładki (nie usuwa pliku)
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "close-btn";
+    closeBtn.innerHTML = "&times;";
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
+      closeTab(fname);
+    };
+    tab.appendChild(closeBtn);
+
+    tabsBar.appendChild(tab);
+  });
+}
+
+function openFileTab(fname) {
+  if (!openTabs.includes(fname)) openTabs.push(fname);
+  selectFileInExplorer(fname);
+  loadAndShowFile(fname);
+  renderTabs();
+}
+
+function switchTab(fname) {
+  selectFileInExplorer(fname);
+  loadAndShowFile(fname);
+  renderTabs();
+}
+
+function closeTab(fname) {
+  const idx = openTabs.indexOf(fname);
+  if (idx !== -1) openTabs.splice(idx, 1);
+  // Jeśli zamknięto aktywną zakładkę
+  if (currentFilePath === fname) {
+    if (openTabs.length > 0) {
+      selectFileInExplorer(openTabs[openTabs.length - 1]);
+      loadAndShowFile(openTabs[openTabs.length - 1]);
+    } else {
+      currentFilePath = null;
+      window.editor.setValue("");
+    }
+  }
+  renderTabs();
+}
+
+// ========== Pliki: załaduj, odśwież, itp ==========
+function selectFileInExplorer(fname) {
+  currentFilePath = fname;
+  showFileExplorer();
+  renderTabs();
+}
+function loadAndShowFile(fname) {
+  window.editor.setValue(allFileContents[fname] || "");
+  let ext = fname.split('.').pop().toLowerCase();
+  let lang = (ext === "js") ? "javascript" :
+    (ext === "css") ? "css" :
+    (ext === "json") ? "json" :
+    (ext === "md") ? "markdown" :
+    (ext === "txt") ? "plaintext" : "html";
+  monaco.editor.setModelLanguage(window.editor.getModel(), lang);
+  updateLivePreview();
+}
+function saveCurrentFile() {
+  if (currentFilePath) {
+    allFileContents[currentFilePath] = window.editor.getValue();
+  }
+}
+
+// ========== Obsługa plików / obrazków ==========
 const multiFileInput = document.createElement("input");
 multiFileInput.type = "file";
 multiFileInput.multiple = true;
@@ -34,14 +118,14 @@ multiFileInput.id = "multiFileInput";
 const multiFileLabel = document.createElement("label");
 multiFileLabel.textContent = "Wczytaj pliki szablonu:";
 multiFileLabel.appendChild(multiFileInput);
-document.querySelector(".code-panel").insertBefore(multiFileLabel, document.getElementById("file-explorer"));
+document.getElementById("all-files-panel").appendChild(multiFileLabel);
 
 multiFileInput.addEventListener("change", async (e) => {
   const files = Array.from(e.target.files);
   for (let file of files) {
     if (file.type.startsWith("image/")) {
       const reader = new FileReader();
-      reader.onload = function(evt) {
+      reader.onload = function (evt) {
         imageFiles[file.name] = evt.target.result;
         refreshImgList();
       };
@@ -51,18 +135,17 @@ multiFileInput.addEventListener("change", async (e) => {
     // Pliki tekstowe
     const text = await file.text();
     allFileContents[file.name] = text;
-    ensureFileInExplorer(file.name);
+    if (!openTabs.includes(file.name)) openTabs.push(file.name);
   }
   if (files.length > 0) {
-    currentFilePath = files[0].name;
-    window.editor.setValue(allFileContents[currentFilePath]);
-    selectFileInExplorer(currentFilePath);
-    updateLivePreview();
+    selectFileInExplorer(files[0].name);
+    loadAndShowFile(files[0].name);
+    renderTabs();
   }
   showFileExplorer();
 });
 
-// ========== Obsługa obrazków (dodatkowy input) ==========
+// ========== Obsługa obrazków ==========
 const imgInput = document.createElement("input");
 imgInput.type = "file";
 imgInput.accept = "image/*";
@@ -71,18 +154,18 @@ imgInput.id = "imgInput";
 const imgLabel = document.createElement("label");
 imgLabel.textContent = "Dodaj obrazek:";
 imgLabel.appendChild(imgInput);
-document.querySelector(".code-panel").insertBefore(imgLabel, document.getElementById("file-explorer"));
+document.getElementById("all-files-panel").appendChild(imgLabel);
 
 const imgListDiv = document.createElement("div");
 imgListDiv.id = "img-list";
 imgListDiv.style.margin = "10px 0";
-document.querySelector(".code-panel").insertBefore(imgListDiv, document.getElementById("file-explorer"));
+document.getElementById("all-files-panel").appendChild(imgListDiv);
 
 imgInput.addEventListener("change", async (e) => {
   for (const file of e.target.files) {
     if (file.type.startsWith("image/")) {
       const reader = new FileReader();
-      reader.onload = function(evt) {
+      reader.onload = function (evt) {
         imageFiles[file.name] = evt.target.result;
         refreshImgList();
       };
@@ -103,58 +186,20 @@ function refreshImgList() {
     container.appendChild(img);
     const span = document.createElement("span");
     span.textContent = name;
-    span.style.fontSize = "0.8em";
+    span.style.fontSize = "0.9em";
     span.style.marginRight = "10px";
     container.appendChild(span);
   });
 }
 
-// ========== Eksplorator plików ==========
-function showFileExplorer() {
-  const explorer = document.getElementById("file-explorer");
-  explorer.innerHTML = "";
-  Object.keys(allFileContents).forEach(fname => {
-    ensureFileInExplorer(fname);
-  });
-}
-function ensureFileInExplorer(fname) {
-  const explorer = document.getElementById("file-explorer");
-  if ([...explorer.children].some(n => n.textContent === fname)) return;
-  const el = document.createElement("span");
-  el.textContent = fname;
-  el.className = "file";
-  el.onclick = () => {
-    saveCurrentFile();
-    selectFileInExplorer(fname);
-    loadAndShowFile(fname);
-    updateLivePreview();
-  };
-  explorer.appendChild(el);
-}
-function selectFileInExplorer(fname) {
-  currentFilePath = fname;
-  const nodes = document.querySelectorAll("#file-explorer .file");
-  nodes.forEach(n => n.classList.toggle("selected", n.textContent === fname));
-}
-function loadAndShowFile(fname) {
-  window.editor.setValue(allFileContents[fname] || "");
-  let ext = fname.split('.').pop().toLowerCase();
-  let lang = (ext === "js") ? "javascript" :
-             (ext === "css") ? "css" :
-             (ext === "json") ? "json" :
-             (ext === "md") ? "markdown" :
-             (ext === "txt") ? "plaintext" : "html";
-  monaco.editor.setModelLanguage(window.editor.getModel(), lang);
-}
-function saveCurrentFile() {
-  if (currentFilePath) {
-    allFileContents[currentFilePath] = window.editor.getValue();
-  }
-}
-
 // ========== AI CHAT ==========
+const sendBtn = document.getElementById("chat-send");
+const chatInput = document.getElementById("chat-input");
+const chatBox = document.getElementById("chat-messages");
+const preview = document.getElementById("ai-code-preview");
+
 sendBtn.onclick = handleChatSend;
-chatInput.addEventListener("keydown", function(event) {
+chatInput.addEventListener("keydown", function (event) {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     sendBtn.click();
@@ -203,18 +248,19 @@ async function handleChatSend() {
         changedFiles = Object.keys(data.result.files);
         changedFiles.forEach(fname => {
           allFileContents[fname] = data.result.files[fname];
+          if (!openTabs.includes(fname)) openTabs.push(fname);
           if (fname === currentFilePath) {
             window.editor.setValue(data.result.files[fname]);
           }
-          ensureFileInExplorer(fname);
         });
+        renderTabs();
+        showFileExplorer();
         updateLivePreview();
         aiMessage = changedFiles.length
           ? "Zaktualizowałem pliki: " + changedFiles.join(", ")
           : "";
         preview.textContent = aiMessage || "Brak zmian w plikach.";
       }
-      showFileExplorer();
     } else {
       addChatMessage("ai", "Brak odpowiedzi AI.");
     }
@@ -253,7 +299,7 @@ document.getElementById("download").onclick = async () => {
   });
   for (const [fname, dataUrl] of Object.entries(imageFiles)) {
     const base64 = dataUrl.split(",")[1];
-    zip.file(fname, base64, {base64: true});
+    zip.file(fname, base64, { base64: true });
   }
   const blob = await zip.generateAsync({ type: "blob" });
   const url = URL.createObjectURL(blob);
@@ -292,6 +338,7 @@ window.addEventListener("DOMContentLoaded", () => {
   showFileExplorer();
   selectFileInExplorer("index.html");
   loadAndShowFile("index.html");
+  renderTabs();
   refreshImgList();
   updateLivePreview();
 });
