@@ -19,24 +19,24 @@
           <span>💬 Czat AI</span>
           <span class="collapse-arrow" id="arrow-chat-panel">&#9660;</span>
         </div>
-        <div class="collapsible-body">
+        <div class="collapsible-body" id="chat-collapsible-body">
           <div id="chat-messages"></div>
           <textarea id="chat-input" placeholder="Napisz wiadomość do AI"></textarea>
           <button id="chat-send">Wyślij</button>
         </div>
       </div>
       <div class="sidebar-content">
-        <div class="sidebar-header collapsible expanded" id="files-panel">
-          <span onclick="toggleCollapse('files-panel')">📂 Pliki projektu</span>
+        <div class="sidebar-header collapsible expanded" id="files-panel" onclick="toggleCollapse('files-panel')">
+          <span>📂 Pliki projektu</span>
           <input id="fileInput" type="file" multiple style="display:none;" accept=".js,.css,.html,.json,.md,.txt,.ts,.tsx,.jsx,.csv,.xml,.yml,.yaml,.ini,.cfg,.sh,.bat,.py,.php,.rb,.go,.java,.c,.cpp,.h,.hpp,.swift,.rs,.kt,.pl,.cs,.scala,.dart,.lua,.r">
-          <button id="add-file-btn" title="Dodaj plik">➕</button>
+          <button id="add-file-btn" title="Dodaj plik" type="button" onclick="event.stopPropagation();document.getElementById('fileInput').click();">➕</button>
           <span class="collapse-arrow" id="arrow-files-panel">&#9660;</span>
         </div>
         <ul id="file-tree" class="collapsible-body"></ul>
-        <div class="sidebar-header collapsible expanded" id="images-panel" style="margin-top:18px;">
-          <span onclick="toggleCollapse('images-panel')">🖼️ Obrazki</span>
+        <div class="sidebar-header collapsible expanded" id="images-panel" style="margin-top:18px;" onclick="toggleCollapse('images-panel')">
+          <span>🖼️ Obrazki</span>
           <input id="imgInput" type="file" accept="image/*" multiple style="display:none;">
-          <button id="add-img-btn" title="Dodaj obrazek">➕</button>
+          <button id="add-img-btn" title="Dodaj obrazek" type="button" onclick="event.stopPropagation();document.getElementById('imgInput').click();">➕</button>
           <span class="collapse-arrow" id="arrow-images-panel">&#9660;</span>
         </div>
         <div id="img-list" class="collapsible-body"></div>
