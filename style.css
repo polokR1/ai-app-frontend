@@ -70,11 +70,11 @@ h1 {
   padding: 13px 12px 10px 12px;
   border-bottom: 2px solid var(--border);
   background: var(--panel-bg);
-  min-height: 120px;
+  min-height: 180px;
   resize: vertical;
   overflow: auto;
-  height: 380px;
-  max-height: 80vh;
+  height: 520px;
+  max-height: 85vh;
   transition: max-height 0.3s;
 }
 .resizer-vertical {
@@ -101,7 +101,7 @@ h1 {
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 80px;
+  min-height: 150px;
   resize: none;
   overflow: auto;
 }
@@ -109,13 +109,13 @@ h1 {
   flex: 1 1 auto;
   overflow-y: auto;
   border: 1px solid var(--border);
-  margin-bottom: 8px;
-  padding: 5px;
-  background: var(--editor-bg);
-  border-radius: 4px;
+  margin-bottom: 9px;
+  padding: 8px 10px 8px 10px;
+  background: #181e26;
+  border-radius: 7px;
   min-height: 60px;
-  max-height: 200px;
-  font-size: 1em;
+  max-height: 320px;
+  font-size: 1.07em;
 }
 #chat-input {
   width: 100%;
@@ -145,6 +145,18 @@ h1 {
 #chat-send:hover, #clear-chat:hover {
   background: var(--button-hover);
   color: var(--button-text-hover);
+}
+
+/* Kolory wiadomości czatu */
+.msg-user .bubble {
+  background: #2d5436;
+  color: #e5ffe7;
+  border: 1px solid #50fa7b55;
+}
+.msg-ai .bubble {
+  background: #22304c;
+  color: #8be9fd;
+  border: 1px solid #8be9fd55;
 }
 
 .sidebar-header {
