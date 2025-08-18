@@ -44,7 +44,22 @@ function initUI() {
   updateLivePreview();
 
   // Obsługa przycisku dodawania pliku
-  document.getElementById('add-file-btn').onclick = () => showAddFileDialog();
+  document.getElementById('add-file-btn').onclick = () => {
+    document.getElementById('fileInput').click();
+  };
+  document.getElementById('fileInput').onchange = async (e) => {
+    for (const file of e.target.files) {
+      if (!file.type.startsWith('image/')) {
+        const text = await file.text();
+        allFileContents[file.name] = text;
+        openFileTab(file.name);
+      }
+    }
+    renderFileTree();
+    renderTabs();
+    updateLivePreview();
+    e.target.value = '';
+  };
 
   // Drag&drop plików
   document.getElementById('file-tree').ondragover = e => { e.preventDefault(); };
@@ -68,6 +83,21 @@ function initUI() {
 
   // Resizery paneli
   resizerSetup();
+}
+
+// ========== COLLAPSIBLE PANELS ==========
+window.toggleCollapse = function(panelId) {
+  const panel = document.getElementById(panelId);
+  const arrow = document.getElementById('arrow-' + panelId);
+  if (panel.classList.contains('collapsed')) {
+    panel.classList.remove('collapsed');
+    panel.classList.add('expanded');
+    if (arrow) arrow.innerHTML = '&#9660;';
+  } else {
+    panel.classList.remove('expanded');
+    panel.classList.add('collapsed');
+    if (arrow) arrow.innerHTML = '&#9654;';
+  }
 }
 
 // ========== OBSŁUGA DRZEWA PLIKÓW ==========
@@ -103,7 +133,7 @@ function renderFileTree() {
   });
 }
 
-// Dodawanie nowego pliku
+// Dodawanie nowego pliku przez modal
 function showAddFileDialog() {
   showModal('Nowy plik', `
     <label>Nazwa pliku:</label>
@@ -441,7 +471,7 @@ function resizerSetup() {
       function onMove(ev) {
         const dx = ev.clientX - startX;
         if (isLeft) {
-          let newA = Math.max(120, startA + dx);
+          let newA = Math.max(160, startA + dx);
           let newB = Math.max(180, startB - dx);
           panelA.style.width = newA + 'px';
           panelB.style.width = newB + 'px';
