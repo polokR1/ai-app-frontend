@@ -14,18 +14,25 @@
   </header>
   <div class="main-wrapper">
     <aside class="sidebar" id="sidebar-panel">
-      <div class="sidebar-header">
-        <span>📂 Pliki projektu</span>
-        <button id="add-file-btn" title="Dodaj plik">➕</button>
+      <div class="chat-panel sidebar-chat">
+        <div id="chat-messages"></div>
+        <textarea id="chat-input" placeholder="Napisz wiadomość do AI"></textarea>
+        <button id="chat-send">Wyślij</button>
       </div>
-      <ul id="file-tree"></ul>
-      <div class="sidebar-header" style="margin-top:18px;">
-        <span>🖼️ Obrazki</span>
-        <input id="imgInput" type="file" accept="image/*" multiple style="display:none;">
-        <button id="add-img-btn" title="Dodaj obrazek">➕</button>
+      <div class="sidebar-content">
+        <div class="sidebar-header">
+          <span>📂 Pliki projektu</span>
+          <button id="add-file-btn" title="Dodaj plik">➕</button>
+        </div>
+        <ul id="file-tree"></ul>
+        <div class="sidebar-header" style="margin-top:18px;">
+          <span>🖼️ Obrazki</span>
+          <input id="imgInput" type="file" accept="image/*" multiple style="display:none;">
+          <button id="add-img-btn" title="Dodaj obrazek">➕</button>
+        </div>
+        <div id="img-list"></div>
+        <button id="download" class="download-btn">⬇️ Pobierz ZIP</button>
       </div>
-      <div id="img-list"></div>
-      <button id="download" class="download-btn">⬇️ Pobierz ZIP</button>
     </aside>
     <div class="resizer" id="resizer-left"></div>
     <section class="editor-section" id="editor-panel">
@@ -34,11 +41,6 @@
     </section>
     <div class="resizer" id="resizer-right"></div>
     <aside class="right-panel" id="right-panel">
-      <div class="chat-panel">
-        <div id="chat-messages"></div>
-        <textarea id="chat-input" placeholder="Napisz wiadomość do AI"></textarea>
-        <button id="chat-send">Wyślij</button>
-      </div>
       <div class="preview-section">
         <h3>Podgląd na żywo</h3>
         <iframe id="live-preview"></iframe>
