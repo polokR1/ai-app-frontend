@@ -43,7 +43,7 @@ function initUI() {
   renderImageList();
   updateLivePreview();
 
-  // Obsługa przycisku dodawania pliku
+  // Dodawanie pliku tekstowego
   document.getElementById('fileInput').onchange = async (e) => {
     for (const file of e.target.files) {
       if (!file.type.startsWith('image/')) {
@@ -77,15 +77,20 @@ function initUI() {
     }
   });
 
+  document.getElementById('clear-chat').onclick = clearChatHistory;
+
   // Resizery paneli
   resizerSetup();
+  resizerChatSetup();
+
+  // Historia czatu
+  loadChatHistory();
 }
 
 // ========== COLLAPSIBLE PANELS ==========
 window.toggleCollapse = function(panelId) {
   const panel = document.getElementById(panelId);
   const arrow = document.getElementById('arrow-' + panelId);
-  // Collapsible-body = następny element po headerze, lub id="chat-collapsible-body"
   let body = null;
   if (panelId === 'chat-panel') body = document.getElementById('chat-collapsible-body');
   else body = panel.nextElementSibling;
@@ -100,6 +105,57 @@ window.toggleCollapse = function(panelId) {
     if (arrow) arrow.innerHTML = '&#9654;';
     if (body) body.style.display = 'none';
   }
+}
+
+// ========== PIONOWY RESIZER CZATU ==========
+function resizerChatSetup() {
+  const resizer = document.getElementById('resizer-chat');
+  const chatPanel = document.getElementById('chat-panel');
+  let startY, startHeight;
+  resizer.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    startY = e.clientY;
+    startHeight = chatPanel.offsetHeight;
+    resizer.classList.add('active');
+    document.body.style.cursor = 'row-resize';
+    function onMove(ev) {
+      const dy = ev.clientY - startY;
+      let newH = Math.max(100, startHeight + dy);
+      chatPanel.style.height = newH + 'px';
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      resizer.classList.remove('active');
+      document.body.style.cursor = '';
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+// ========== CHAT HISTORY ==========
+function loadChatHistory() {
+  const raw = localStorage.getItem('chatHistory');
+  if (!raw) return;
+  let arr = [];
+  try { arr = JSON.parse(raw); } catch {}
+  for (const msg of arr) {
+    addChatMessage(msg.who, msg.text, true);
+  }
+}
+function saveChatHistory() {
+  const msgs = [];
+  document.querySelectorAll("#chat-messages .msg").forEach(div => {
+    const who = div.classList.contains("msg-user") ? "user" : "ai";
+    const text = div.querySelector('.bubble').textContent;
+    msgs.push({who, text});
+  });
+  localStorage.setItem('chatHistory', JSON.stringify(msgs));
+}
+function clearChatHistory() {
+  localStorage.removeItem('chatHistory');
+  document.getElementById("chat-messages").innerHTML = "";
 }
 
 // ========== OBSŁUGA DRZEWA PLIKÓW ==========
@@ -447,7 +503,7 @@ function setSending(isSending) {
   btn.disabled = isSending;
   btn.textContent = isSending ? "Wysyłam..." : "Wyślij";
 }
-function addChatMessage(who, text) {
+function addChatMessage(who, text, skipSave) {
   const div = document.createElement("div");
   div.className = who === "user" ? "msg msg-user" : "msg msg-ai";
   const bubble = document.createElement("div");
@@ -456,6 +512,7 @@ function addChatMessage(who, text) {
   div.appendChild(bubble);
   document.getElementById("chat-messages").appendChild(div);
   document.getElementById("chat-messages").scrollTop = document.getElementById("chat-messages").scrollHeight;
+  if (!skipSave) saveChatHistory();
 }
 
 // ========== RESIZER PANELS ==========
