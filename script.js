@@ -65,6 +65,9 @@ function initUI() {
       document.getElementById('chat-send').click();
     }
   });
+
+  // Resizery paneli
+  resizerSetup();
 }
 
 // ========== OBSŁUGA DRZEWA PLIKÓW ==========
@@ -421,6 +424,58 @@ function addChatMessage(who, text) {
   div.appendChild(bubble);
   document.getElementById("chat-messages").appendChild(div);
   document.getElementById("chat-messages").scrollTop = document.getElementById("chat-messages").scrollHeight;
+}
+
+// ========== RESIZER PANELS ==========
+function resizerSetup() {
+  function dragHandler(resizer, panelA, panelB, isLeft) {
+    let startX, startA, startB;
+    resizer.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      startX = e.clientX;
+      startA = panelA.offsetWidth;
+      startB = panelB.offsetWidth;
+      resizer.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+
+      function onMove(ev) {
+        const dx = ev.clientX - startX;
+        if (isLeft) {
+          let newA = Math.max(120, startA + dx);
+          let newB = Math.max(180, startB - dx);
+          panelA.style.width = newA + 'px';
+          panelB.style.width = newB + 'px';
+        } else {
+          let newA = Math.max(300, startA + dx);
+          let newB = Math.max(180, startB - dx);
+          panelA.style.width = newA + 'px';
+          panelB.style.width = newB + 'px';
+        }
+        if (window.editor) window.editor.layout();
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        resizer.classList.remove('active');
+        document.body.style.cursor = '';
+        if (window.editor) window.editor.layout();
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+  dragHandler(
+    document.getElementById('resizer-left'),
+    document.getElementById('sidebar-panel'),
+    document.getElementById('editor-panel'),
+    true
+  );
+  dragHandler(
+    document.getElementById('resizer-right'),
+    document.getElementById('editor-panel'),
+    document.getElementById('right-panel'),
+    false
+  );
 }
 
 // ========== EKSPORT FUNKCJI DO HTML ==========
